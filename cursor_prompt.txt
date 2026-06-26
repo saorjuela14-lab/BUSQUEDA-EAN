@@ -1,0 +1,50 @@
+Actúa como un Arquitecto Senior Python especializado en Retail Intelligence.
+
+Genera una aplicación completa lista para producción.
+
+Objetivo:
+
+Comparar precios en retailers colombianos utilizando EAN.
+
+Debe incluir:
+
+1. Scraping Playwright.
+2. Dashboard HTML.
+3. Exportación Excel.
+4. SQLite.
+5. Carga masiva Excel.
+6. Históricos.
+7. Alertas.
+8. Homologación por descripción.
+9. KPIs.
+10. APIs REST.
+
+Debe soportar categorías:
+
+- Dairy
+- Cheese
+- Bakery
+- Fresh Bakery
+- Cold Meat
+- Frozen
+- Seafood
+
+Debe crear todos los archivos automáticamente.
+
+Cada módulo debe estar documentado.
+
+Utilizar buenas prácticas.
+
+Patrón de capas:
+
+Scrapers
+Services
+Database
+API
+Frontend
+
+El resultado debe ser ejecutable con:
+
+pip install -r requirements.txt
+
+python app.py

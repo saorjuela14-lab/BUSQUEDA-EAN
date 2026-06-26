@@ -1,0 +1,132 @@
+/* Makro Retail Price Intelligence — estilos del dashboard */
+:root {
+  --brand: #e2001a;        /* Rojo Makro */
+  --brand-light: #ff3b30;  /* Rojo claro (hover / acentos) */
+  --brand-dark: #a30013;   /* Rojo oscuro (hover de botones) */
+  --accent: #ffd100;       /* Amarillo Makro */
+  --bg: #f7f4f4;
+  --card: #ffffff;
+  --text: #1c2434;
+  --muted: #6b7280;
+  --green: #16a34a;
+  --amber: #d97706;
+  --red: #dc2626;
+  --border: #f0e3e4;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+.app-shell { display: flex; min-height: 100vh; }
+
+/* SIDEBAR */
+.sidebar {
+  width: 240px;
+  background: var(--brand);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  inset: 0 auto 0 0;
+}
+.brand { padding: 22px 20px; border-bottom: 1px solid rgba(255,255,255,.12); }
+.brand-logo { font-weight: 800; letter-spacing: 2px; font-size: 22px; }
+.brand-logo::after { content: ''; }
+.brand-sub { font-size: 11px; color: rgba(255,255,255,.7); margin-top: 2px; }
+.nav-menu { padding: 14px 10px; flex: 1; }
+.nav-link {
+  display: flex; align-items: center; gap: 10px;
+  color: rgba(255,255,255,.82);
+  padding: 11px 14px; border-radius: 8px; cursor: pointer;
+  font-size: 14px; margin-bottom: 4px; text-decoration: none;
+}
+.nav-link:hover { background: rgba(255,255,255,.10); color: #fff; }
+.nav-link.active { background: var(--accent); color: var(--brand); font-weight: 600; }
+.sidebar-footer { padding: 16px 20px; font-size: 12px; color: rgba(255,255,255,.7); border-top: 1px solid rgba(255,255,255,.12); }
+
+/* MAIN */
+.main { margin-left: 240px; flex: 1; padding: 28px 34px; max-width: 1280px; }
+.page-title { font-size: 24px; font-weight: 700; margin: 0; }
+.page-sub { color: var(--muted); margin: 4px 0 22px; font-size: 14px; }
+
+.card { border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+.filter-card { margin-bottom: 22px; }
+.form-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+
+.btn-primary { background: var(--brand); border-color: var(--brand); }
+.btn-primary:hover, .btn-primary:focus { background: var(--brand-dark); border-color: var(--brand-dark); }
+.btn-primary:active { background: var(--brand-dark) !important; border-color: var(--brand-dark) !important; }
+
+/* Overrides Bootstrap: que el "primario" sea el rojo Makro */
+.text-primary { color: var(--brand) !important; }
+.spinner-border.text-primary { color: var(--brand) !important; }
+.btn-outline-primary { color: var(--brand); border-color: var(--brand); }
+.btn-outline-primary:hover { background: var(--brand); border-color: var(--brand); color: #fff; }
+.form-control:focus, .form-select:focus {
+  border-color: var(--brand-light);
+  box-shadow: 0 0 0 .2rem rgba(226, 0, 26, .15);
+}
+
+/* EAN hints */
+.ean-hints { display: flex; flex-wrap: wrap; gap: 8px; }
+.ean-chip {
+  background: #fdecee; border: 1px solid var(--border); color: var(--brand);
+  border-radius: 20px; padding: 5px 12px; font-size: 12px; cursor: pointer;
+}
+.ean-chip:hover { background: var(--accent); color: var(--brand-dark); }
+
+/* KPI grid */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 8px; }
+.kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+.kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.kpi-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+.kpi-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.text-green { color: var(--green); } .text-amber { color: var(--amber); } .text-red { color: var(--red); }
+
+/* Price bars */
+.pbar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.pbar-name { width: 110px; font-size: 13px; font-weight: 600; }
+.pbar-track { flex: 1; background: #eef1f7; border-radius: 6px; height: 26px; overflow: hidden; }
+.pbar-fill { height: 100%; display: flex; align-items: center; padding: 0 8px; color: #fff; font-size: 12px; font-weight: 600; border-radius: 6px; }
+.pbar-tag { font-size: 10px; background: var(--accent); color: var(--brand); border-radius: 4px; padding: 1px 5px; font-weight: 700; }
+
+/* Alerts */
+.alert-list { display: flex; flex-direction: column; gap: 8px; }
+.alert-item { border-radius: 8px; padding: 10px 14px; font-size: 13px; border-left: 4px solid var(--muted); background: #f8fafc; }
+.alert-item.danger { border-color: var(--red); background: #fef2f2; }
+.alert-item.warning { border-color: var(--amber); background: #fffbeb; }
+.alert-item.info { border-color: var(--brand-light); background: #fff5f5; }
+
+/* Pestañas de búsqueda (EAN / Nombre) */
+.search-tabs { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+.search-tab {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 1px solid var(--border); background: var(--card); color: var(--muted);
+  border-radius: 10px; padding: 10px 18px; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: all .15s ease;
+}
+.search-tab:hover { border-color: var(--brand-light); color: var(--brand); }
+.search-tab.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+.search-tab .bi { font-size: 16px; }
+.search-pane.d-none { display: none !important; }
+
+/* Strategy cards */
+.strategy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.strategy-card { border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: var(--card); }
+.strategy-name { font-weight: 700; font-size: 14px; color: var(--brand); }
+.strategy-price { font-size: 22px; font-weight: 800; margin: 8px 0 2px; }
+
+.section-title { font-size: 16px; font-weight: 700; margin: 26px 0 12px; }
+.badge-cat { font-size: 11px; padding: 4px 10px; border-radius: 20px; font-weight: 600; }
+.loading { color: var(--muted); padding: 30px; text-align: center; }
+.d-none { display: none !important; }
+
+@media (max-width: 860px) {
+  .sidebar { position: static; width: 100%; flex-direction: row; flex-wrap: wrap; }
+  .main { margin-left: 0; }
+}
