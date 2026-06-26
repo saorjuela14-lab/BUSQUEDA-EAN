@@ -3,7 +3,8 @@ Comparativo de precios entre retailers.
 
 Calcula KPIs de mercado a partir de los resultados de scraping:
 precio mínimo, máximo, promedio, spread, retailer líder (más barato) y
-retailer más caro. Usa el precio efectivo (promo si existe, si no el regular).
+retailer más caro. Usa siempre el precio regular (sin descuento); las
+promociones se reportan aparte como información adicional.
 """
 from __future__ import annotations
 
@@ -13,12 +14,17 @@ from .rounding import round_cop
 
 
 def _effective(result: dict) -> Optional[int]:
-    """Precio efectivo de un resultado: promo si existe, de lo contrario regular."""
+    """Precio de referencia de un retailer: SIEMPRE el precio regular (sin descuento).
+
+    Las promociones (`promo_price`) se conservan aparte y se muestran solo como
+    información adicional. Los KPIs, márgenes y alertas se calculan sobre el
+    precio de lista (sin descuento) para reflejar el precio "normal" del mercado
+    y no distorsionarlo con promociones temporales de la competencia.
+    """
     if not result.get("found"):
         return None
-    promo = result.get("promo_price")
-    price = result.get("price")
-    return promo if promo else price
+    # Preferir el precio regular; usar promo solo si no hubiera precio regular.
+    return result.get("price") or result.get("promo_price")
 
 
 def compute_market_kpis(results: list[dict]) -> dict:
