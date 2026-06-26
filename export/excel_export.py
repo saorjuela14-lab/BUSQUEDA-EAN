@@ -102,7 +102,8 @@ def _sheet_prices(wb: Workbook, report: dict) -> None:
     headers = ["Retailer", "Disponible", "Precio regular", "Precio promo", "Promoción", "Precio efectivo", "Link"]
     _style_header(ws, 1, headers)
     for i, r in enumerate(report.get("results", []), start=2):
-        eff = r.get("promo_price") or r.get("price")
+        # Precio efectivo = precio regular (sin descuento); la promo va aparte.
+        eff = r.get("price") or r.get("promo_price")
         ws.cell(row=i, column=1, value=r.get("retailer_name") or r.get("retailer"))
         ws.cell(row=i, column=2, value="Sí" if r.get("found") else "No").alignment = _CENTER
         c3 = ws.cell(row=i, column=3, value=r.get("price")); c3.number_format = _MONEY_FMT
@@ -115,18 +116,19 @@ def _sheet_prices(wb: Workbook, report: dict) -> None:
 
 def _sheet_margins(wb: Workbook, report: dict) -> None:
     ws = wb.create_sheet("Análisis de márgenes")
-    headers = ["Retailer", "Precio efectivo", "Costo", "Margen $", "Margen %"]
+    headers = ["Retailer", "Precio regular", "Precio con descuento", "Costo", "Margen $", "Margen %"]
     _style_header(ws, 1, headers)
     cost = report.get("cost")
     for i, m in enumerate(report.get("margins", []), start=2):
         ws.cell(row=i, column=1, value=m.get("retailer"))
         c2 = ws.cell(row=i, column=2, value=m.get("effective_price")); c2.number_format = _MONEY_FMT
-        c3 = ws.cell(row=i, column=3, value=cost); c3.number_format = _MONEY_FMT
-        c4 = ws.cell(row=i, column=4, value=m.get("margin_value")); c4.number_format = _MONEY_FMT
+        c3 = ws.cell(row=i, column=3, value=m.get("promo_price")); c3.number_format = _MONEY_FMT
+        c4 = ws.cell(row=i, column=4, value=cost); c4.number_format = _MONEY_FMT
+        c5 = ws.cell(row=i, column=5, value=m.get("margin_value")); c5.number_format = _MONEY_FMT
         pct = m.get("margin_pct")
-        c5 = ws.cell(row=i, column=5, value=(pct / 100) if pct is not None else None)
-        c5.number_format = _PCT_FMT
-    _autofit(ws, {1: 16, 2: 15, 3: 14, 4: 14, 5: 12})
+        c6 = ws.cell(row=i, column=6, value=(pct / 100) if pct is not None else None)
+        c6.number_format = _PCT_FMT
+    _autofit(ws, {1: 16, 2: 15, 3: 18, 4: 14, 5: 14, 6: 12})
 
 
 def _sheet_strategies(wb: Workbook, report: dict) -> None:
