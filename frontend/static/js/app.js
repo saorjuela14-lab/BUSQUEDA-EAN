@@ -136,7 +136,8 @@ function renderReport(report) {
       `<div class="alert alert-warning">No se encontró el producto en ningún retailer. Prueba con descripción para homologar.</div>`;
     return;
   }
-  const maxEff = Math.max(...found.map(r => r.effective_price || r.promo_price || r.price));
+  // Precio de referencia para escalar barras: SIEMPRE el regular (sin descuento).
+  const maxEff = Math.max(...found.map(r => r.effective_price || r.price || r.promo_price));
 
   const byName = report.search_mode === 'name';
   // En búsqueda por nombre el EAN es sintético: no lo mostramos.
@@ -171,29 +172,31 @@ function renderReport(report) {
       ${kpiCards.map(([l, v, s, c]) => `<div class="kpi-card"><div class="kpi-label">${l}</div><div class="kpi-value ${c}">${v}</div><div class="kpi-sub">${s||''}</div></div>`).join('')}
     </div>`;
 
-  // Distribución de precios
+  // Distribución de precios (basada en el precio regular, sin descuento)
   const sorted = [...found].sort((a, b) => (a.effective_price||a.price) - (b.effective_price||b.price));
-  html += `<div class="card mt-3"><div class="card-body"><h6 class="card-title">Distribución de precios por cadena</h6>`;
+  html += `<div class="card mt-3"><div class="card-body"><h6 class="card-title">Distribución de precios por cadena <span class="text-muted fw-normal small">(precio regular, sin descuento)</span></h6>`;
   sorted.forEach(r => {
-    const eff = r.effective_price || r.promo_price || r.price;
-    const w = Math.max(8, Math.round((eff / (maxEff * 1.05)) * 100));
+    const reg = r.effective_price || r.price || r.promo_price;
+    const w = Math.max(8, Math.round((reg / (maxEff * 1.05)) * 100));
     const color = (CONFIG.retailers[r.retailer] || {}).color || '#e2001a';
-    const isMin = eff === k.min_price;
+    const isMin = reg === k.min_price;
     html += `<div class="pbar-row">
       <div class="pbar-name">${isMin ? '🏆 ' : ''}${r.retailer_name}</div>
-      <div class="pbar-track"><div class="pbar-fill" style="width:${w}%;background:${color}">${fmtCOP(eff)}</div></div>
-      ${r.promo_price ? '<span class="pbar-tag">PROMO</span>' : '<span style="width:46px"></span>'}
+      <div class="pbar-track"><div class="pbar-fill" style="width:${w}%;background:${color}">${fmtCOP(reg)}</div></div>
+      ${r.promo_price ? `<span class="pbar-tag" title="Precio con descuento de la competencia">PROMO ${fmtCOP(r.promo_price)}</span>` : '<span style="width:46px"></span>'}
     </div>`;
   });
   html += `</div></div>`;
 
   // Tabla de márgenes
-  html += `<h2 class="section-title">Comparativo de márgenes</h2>
+  html += `<h2 class="section-title">Comparativo de márgenes <span class="text-muted fw-normal small">(margen calculado sobre el precio regular)</span></h2>
     <div class="card"><div class="card-body table-responsive">
     <table class="table table-sm align-middle"><thead><tr>
-      <th>Retailer</th><th>Precio efectivo</th><th>Costo</th><th>Margen $</th><th>Margen %</th></tr></thead><tbody>
+      <th>Retailer</th><th>Precio regular</th><th>Precio con descuento</th><th>Costo</th><th>Margen $</th><th>Margen %</th></tr></thead><tbody>
     ${report.margins.filter(m => m.found).map(m => `<tr>
-      <td>${m.retailer}</td><td>${fmtCOP(m.effective_price)}</td><td>${fmtCOP(report.cost)}</td>
+      <td>${m.retailer}</td><td>${fmtCOP(m.effective_price)}</td>
+      <td>${m.promo_price ? `<span class="text-red fw-bold">${fmtCOP(m.promo_price)}</span>` : '<span class="text-muted">—</span>'}</td>
+      <td>${fmtCOP(report.cost)}</td>
       <td>${fmtCOP(m.margin_value)}</td><td class="${marginColor(m.margin_pct)} fw-bold">${fmtPct(m.margin_pct)}</td></tr>`).join('')}
     </tbody></table></div></div>`;
 
