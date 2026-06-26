@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Entorno
+.env
+
+# Base de datos
+*.db
+*.sqlite3
+
+# Artefactos de la app
+/uploads/*
+/reports/*
+/logs/*
+!**/.gitkeep
+
+# IDE / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
