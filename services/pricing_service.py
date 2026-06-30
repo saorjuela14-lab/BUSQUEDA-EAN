@@ -21,6 +21,9 @@ from database import repository
 
 from . import alerts as alerts_mod
 from . import comparison, margins, strategies
+from .home_position import compute_home_position, home_position_alert
+from .makro_catalog import apply_makro_catalog, competitor_results
+from .weight import enrich_result_weight_metadata, normalize_results_for_weight
 from scrapers import scrape_all
 
 
@@ -39,6 +42,7 @@ def run_query(
     *,
     category: Optional[str] = None,
     target_margin: Optional[float] = None,
+    target_weight_g: Optional[float] = None,
     retailer_keys: Optional[list[str]] = None,
     priority: Optional[int] = None,
     persist: bool = True,
@@ -59,26 +63,47 @@ def run_query(
     )
     results = [r.to_dict() for r in raw_results]
 
-    # Determinar nombre/categoría del producto a partir de los hallazgos.
+    if target_weight_g and target_weight_g > 0:
+        results = normalize_results_for_weight(results, target_weight_g)
+    else:
+        results = [enrich_result_weight_metadata(r) for r in results]
+
+    # Determinar nombre/categoría del producto a partir de los hallazgos o catálogo.
     product_name = description
     match_mode = "ean"
+    catalog_product = repository.get_product_by_ean(ean)
     for r in results:
         if r.get("found"):
             product_name = product_name or r.get("product_name")
             if r.get("match_mode") == "description":
                 match_mode = "description"
     if product_name is None:
-        existing = repository.get_product_by_ean(ean)
-        product_name = existing["name"] if existing else ean
-        category = category or (existing["category"] if existing else None)
+        product_name = catalog_product["name"] if catalog_product else ean
+        category = category or (catalog_product["category"] if catalog_product else None)
+    elif catalog_product and not product_name:
+        product_name = catalog_product["name"]
 
-    kpis = comparison.compute_market_kpis(results)
+    # Costo: el ingresado manualmente tiene prioridad; si no, el del catálogo.
+    if cost is None and catalog_product:
+        cost = catalog_product.get("cost")
+
+    # Integrar PVP Makro desde catálogo importado.
+    results, catalog_product, makro_pvp = apply_makro_catalog(ean, results, category=category)
+
+    # KPIs de mercado solo con competidores (sin Makro).
+    competitor_rows = competitor_results(results)
+    kpis = comparison.compute_market_kpis(competitor_rows)
     margin_rows = margins.compute_margins(results, cost)
-    margin_stats = margins.margin_summary(results, cost)
+    margin_stats = margins.margin_summary(competitor_rows, cost)
     kpis["avg_margin_pct"] = margin_stats.get("avg_margin_pct")
 
+    home_position = compute_home_position(makro_pvp, kpis)
+
     price_strategies = strategies.build_strategies(kpis, cost, target_margin)
-    detected_alerts = alerts_mod.detect_alerts(ean, results, kpis, cost, previous_avg)
+    detected_alerts = alerts_mod.detect_alerts(ean, competitor_rows, kpis, cost, previous_avg)
+    pos_alert = home_position_alert(home_position, ean)
+    if pos_alert:
+        detected_alerts.insert(0, pos_alert)
 
     # Margen de Makro (retailer de referencia) destacado.
     home_row = next((m for m in margin_rows if m["retailer"] == HOME_RETAILER), None)
@@ -88,6 +113,9 @@ def run_query(
         "product_name": product_name,
         "category": category,
         "cost": cost,
+        "makro_pvp": makro_pvp,
+        "home_position": home_position,
+        "target_weight_g": target_weight_g,
         "match_mode": match_mode,
         "timestamp": datetime.utcnow().isoformat(),
         "results": results,

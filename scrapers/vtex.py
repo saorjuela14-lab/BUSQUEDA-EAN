@@ -53,6 +53,21 @@ class VtexScraper(BaseScraper):
                     best = (key, offer)
         return best[1] if best else None
 
+    @staticmethod
+    def _item_weight_meta(product: dict) -> tuple[Optional[str], Optional[float]]:
+        """Extrae unidad de medida y multiplicador (kg) del primer SKU VTEX."""
+        items = product.get("items") or []
+        if not items:
+            return None, None
+        item = items[0]
+        unit = item.get("measurementUnit")
+        mult = item.get("unitMultiplier")
+        try:
+            mult_f = float(mult) if mult is not None else None
+        except (TypeError, ValueError):
+            mult_f = None
+        return unit, mult_f
+
     def _parse_product(self, product: dict) -> Optional[RetailerResult]:
         """Convierte un producto VTEX en RetailerResult (mejor oferta disponible)."""
         offer = self._best_offer(product)
@@ -72,6 +87,15 @@ class VtexScraper(BaseScraper):
         else:
             price_regular = round_cop(price)
 
+        measurement_unit, unit_multiplier = self._item_weight_meta(product)
+        is_weight_based = measurement_unit == "kg" and unit_multiplier and unit_multiplier > 0
+        price_per_kg = None
+        promo_price_per_kg = None
+        if is_weight_based:
+            price_per_kg = round_cop(price_regular / unit_multiplier)
+            if promo_price is not None:
+                promo_price_per_kg = round_cop(promo_price / unit_multiplier)
+
         return RetailerResult(
             retailer=self.key,
             retailer_name=self.name,
@@ -82,6 +106,11 @@ class VtexScraper(BaseScraper):
             product_name=product.get("productName"),
             url=product.get("link") or product.get("linkText"),
             match_mode="ean",
+            measurement_unit=measurement_unit,
+            unit_multiplier=unit_multiplier,
+            is_weight_based=is_weight_based,
+            price_per_kg=price_per_kg,
+            promo_price_per_kg=promo_price_per_kg,
         )
 
     def _fetch_by_ean(self, ean: str) -> Optional[RetailerResult]:

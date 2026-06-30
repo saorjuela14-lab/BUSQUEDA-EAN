@@ -21,6 +21,7 @@
         <a class="nav-link" data-view="dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a>
         <a class="nav-link" data-view="history"><i class="bi bi-clock-history"></i> Histórico</a>
         <a class="nav-link" data-view="alerts"><i class="bi bi-bell"></i> Alertas</a>
+        <a class="nav-link" data-view="catalog"><i class="bi bi-database"></i> Catálogo Makro</a>
         <a class="nav-link" data-view="bulk"><i class="bi bi-upload"></i> Carga masiva</a>
       </nav>
       <div class="sidebar-footer">
@@ -82,20 +83,32 @@
             <div class="card-body">
               <p class="text-muted small mb-3">
                 <i class="bi bi-info-circle"></i>
-                ¿No tienes el EAN? Busca el producto por su nombre y lo homologamos en cada ecommerce.
+                ¿No tienes el EAN? Busca por nombre y homologamos en cada ecommerce.
+                Para productos <strong>pesables</strong> (pechuga, arándanos, frutas a granel), indica el peso para comparar precios equivalentes.
               </p>
               <div class="row g-3 align-items-end">
-                <div class="col-md-3">
+                <div class="col-md-2">
                   <label class="form-label">Categoría</label>
                   <select id="nameCategorySelect" class="form-select"></select>
                 </div>
-                <div class="col-md-5">
+                <div class="col-md-4">
                   <label class="form-label">Nombre del producto</label>
-                  <input id="nameInput" class="form-control" placeholder="Ej: Leche Alpina Entera 1100 ml" />
+                  <input id="nameInput" class="form-control" placeholder="Ej: Pechuga de pollo, Arándanos" />
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Peso / cantidad</label>
+                  <div class="input-group">
+                    <input id="nameWeightInput" type="number" class="form-control" placeholder="1" min="0" step="any" />
+                    <select id="nameWeightUnit" class="form-select" style="max-width:72px">
+                      <option value="kg" selected>kg</option>
+                      <option value="g">g</option>
+                    </select>
+                  </div>
                 </div>
                 <div class="col-md-2">
                   <label class="form-label">Costo Makro (COP)</label>
                   <input id="nameCostInput" type="number" class="form-control" placeholder="0" />
+                  <div class="form-text">Para el peso indicado</div>
                 </div>
                 <div class="col-md-2 d-grid">
                   <button id="searchNameBtn" class="btn btn-primary"><i class="bi bi-search"></i> Buscar</button>
@@ -154,6 +167,29 @@
         <h1 class="page-title">Alertas</h1>
         <p class="page-sub">Precios bajo costo, fuera de mercado y variaciones superiores al 10%.</p>
         <div id="alertsList" class="alert-list"></div>
+      </section>
+
+      <!-- ── VIEW: CATALOG ── -->
+      <section class="view d-none" id="view-catalog">
+        <h1 class="page-title">Catálogo Makro</h1>
+        <p class="page-sub">
+          Sube un Excel o CSV con tus productos Makro (<code>EAN</code>, <code>Nombre</code>, <code>PVP</code>).
+          En cada comparación se usará el PVP para indicarte si estás más caro o más barato que la competencia.
+        </p>
+        <div class="card"><div class="card-body">
+          <div class="row g-3 align-items-end">
+            <div class="col-md-8">
+              <label class="form-label">Archivo (.xlsx, .xls, .csv)</label>
+              <input id="catalogFile" type="file" accept=".xlsx,.xls,.csv" class="form-control" />
+              <div class="form-text">Columnas: <strong>EAN</strong>, <strong>Nombre</strong>, <strong>PVP</strong>. Opcional: Categoría, Costo.</div>
+            </div>
+            <div class="col-md-4 d-grid">
+              <button id="catalogBtn" class="btn btn-primary"><i class="bi bi-cloud-upload"></i> Importar catálogo</button>
+            </div>
+          </div>
+          <div id="catalogStats" class="mt-3"></div>
+          <div id="catalogResult" class="mt-3"></div>
+        </div></div>
       </section>
 
       <!-- ── VIEW: BULK ── -->
