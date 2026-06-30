@@ -82,20 +82,32 @@
             <div class="card-body">
               <p class="text-muted small mb-3">
                 <i class="bi bi-info-circle"></i>
-                ¿No tienes el EAN? Busca el producto por su nombre y lo homologamos en cada ecommerce.
+                ¿No tienes el EAN? Busca por nombre y homologamos en cada ecommerce.
+                Para productos <strong>pesables</strong> (pechuga, arándanos, frutas a granel), indica el peso para comparar precios equivalentes.
               </p>
               <div class="row g-3 align-items-end">
-                <div class="col-md-3">
+                <div class="col-md-2">
                   <label class="form-label">Categoría</label>
                   <select id="nameCategorySelect" class="form-select"></select>
                 </div>
-                <div class="col-md-5">
+                <div class="col-md-4">
                   <label class="form-label">Nombre del producto</label>
-                  <input id="nameInput" class="form-control" placeholder="Ej: Leche Alpina Entera 1100 ml" />
+                  <input id="nameInput" class="form-control" placeholder="Ej: Pechuga de pollo, Arándanos" />
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Peso / cantidad</label>
+                  <div class="input-group">
+                    <input id="nameWeightInput" type="number" class="form-control" placeholder="1" min="0" step="any" />
+                    <select id="nameWeightUnit" class="form-select" style="max-width:72px">
+                      <option value="kg" selected>kg</option>
+                      <option value="g">g</option>
+                    </select>
+                  </div>
                 </div>
                 <div class="col-md-2">
                   <label class="form-label">Costo Makro (COP)</label>
                   <input id="nameCostInput" type="number" class="form-control" placeholder="0" />
+                  <div class="form-text">Para el peso indicado</div>
                 </div>
                 <div class="col-md-2 d-grid">
                   <button id="searchNameBtn" class="btn btn-primary"><i class="bi bi-search"></i> Buscar</button>

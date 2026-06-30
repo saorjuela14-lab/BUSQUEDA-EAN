@@ -21,6 +21,7 @@ from database import repository
 
 from . import alerts as alerts_mod
 from . import comparison, margins, strategies
+from .weight import enrich_result_weight_metadata, normalize_results_for_weight
 from scrapers import scrape_all
 
 
@@ -39,6 +40,7 @@ def run_query(
     *,
     category: Optional[str] = None,
     target_margin: Optional[float] = None,
+    target_weight_g: Optional[float] = None,
     retailer_keys: Optional[list[str]] = None,
     priority: Optional[int] = None,
     persist: bool = True,
@@ -58,6 +60,11 @@ def run_query(
         priority=priority,
     )
     results = [r.to_dict() for r in raw_results]
+
+    if target_weight_g and target_weight_g > 0:
+        results = normalize_results_for_weight(results, target_weight_g)
+    else:
+        results = [enrich_result_weight_metadata(r) for r in results]
 
     # Determinar nombre/categoría del producto a partir de los hallazgos.
     product_name = description
@@ -88,6 +95,7 @@ def run_query(
         "product_name": product_name,
         "category": category,
         "cost": cost,
+        "target_weight_g": target_weight_g,
         "match_mode": match_mode,
         "timestamp": datetime.utcnow().isoformat(),
         "results": results,
