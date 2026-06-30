@@ -33,6 +33,9 @@ class Product(Base):
     subcategory: Mapped[str | None] = mapped_column(String(80), nullable=True)
     # Costo actual del producto para Makro (COP).
     cost: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # PVP Makro (precio de venta al público) importado desde catálogo.
+    pvp: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    catalog_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     queries: Mapped[list["PriceQuery"]] = relationship(
@@ -48,6 +51,8 @@ class Product(Base):
             "category": self.category,
             "subcategory": self.subcategory,
             "cost": self.cost,
+            "pvp": self.pvp,
+            "catalog_updated_at": self.catalog_updated_at.isoformat() if self.catalog_updated_at else None,
         }
 
 

@@ -26,6 +26,8 @@ def upsert_product(
     brand: str | None = None,
     subcategory: str | None = None,
     cost: int | None = None,
+    pvp: int | None = None,
+    touch_catalog: bool = False,
 ) -> dict:
     """Crea o actualiza un producto por EAN y devuelve su representación."""
     with get_session() as s:
@@ -41,6 +43,10 @@ def upsert_product(
             product.subcategory = subcategory
         if cost is not None:
             product.cost = cost
+        if pvp is not None:
+            product.pvp = pvp
+        if touch_catalog:
+            product.catalog_updated_at = datetime.utcnow()
         s.flush()
         return product.to_dict()
 
@@ -71,6 +77,53 @@ def search_products_by_text(text: str, limit: int = 50) -> list[dict]:
             .limit(limit)
         )
         return [p.to_dict() for p in s.scalars(stmt).all()]
+
+
+def import_catalog_rows(rows: list[dict]) -> dict:
+    """
+    Importa/actualiza productos del catálogo Makro en lote.
+
+    Cada fila espera: ean, name, pvp; opcionalmente category y cost.
+    """
+    imported = 0
+    errors: list[str] = []
+    for idx, row in enumerate(rows, start=1):
+        ean = str(row.get("ean", "")).strip()
+        if not ean:
+            errors.append(f"Fila {idx}: EAN vacío.")
+            continue
+        name = str(row.get("name") or ean).strip()
+        pvp = row.get("pvp")
+        if pvp is None:
+            errors.append(f"Fila {idx} (EAN {ean}): PVP vacío o inválido.")
+            continue
+        category = str(row.get("category") or "dairy").strip() or "dairy"
+        try:
+            upsert_product(
+                ean,
+                name,
+                category,
+                cost=row.get("cost"),
+                pvp=pvp,
+                touch_catalog=True,
+            )
+            imported += 1
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"Fila {idx} (EAN {ean}): {exc}")
+    return {"imported": imported, "errors": errors, "total_rows": len(rows)}
+
+
+def catalog_stats() -> dict:
+    """Estadísticas del catálogo Makro cargado."""
+    with get_session() as s:
+        total = s.scalar(select(func.count(Product.id))) or 0
+        with_pvp = s.scalar(select(func.count(Product.id)).where(Product.pvp.isnot(None))) or 0
+        last_update = s.scalar(select(func.max(Product.catalog_updated_at)))
+        return {
+            "total_products": total,
+            "with_pvp": with_pvp,
+            "last_updated": last_update.isoformat() if last_update else None,
+        }
 
 
 # ──────────────────────────────────────────────────────────────────────────

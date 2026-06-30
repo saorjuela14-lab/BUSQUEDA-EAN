@@ -33,7 +33,7 @@ from config import (
 )
 from database import init_db, repository
 from export import export_report
-from services import bulk, pricing_service
+from services import bulk, catalog_import, pricing_service
 
 # ──────────────────────────────────────────────────────────────────────────
 # LOGGING
@@ -194,6 +194,41 @@ def api_alerts():
 @app.get("/api/products")
 def api_products():
     return jsonify(repository.list_products(category=request.args.get("category")))
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# API: CATÁLOGO MAKRO (nombre, EAN, PVP)
+# ──────────────────────────────────────────────────────────────────────────
+@app.get("/api/catalog/stats")
+def api_catalog_stats():
+    """Estadísticas del catálogo Makro importado."""
+    return jsonify(repository.catalog_stats())
+
+
+@app.post("/api/catalog/import")
+def api_catalog_import():
+    """
+    Importa catálogo Makro desde Excel/CSV.
+
+    Columnas requeridas: EAN, Nombre, PVP.
+    Opcionales: Categoría, Costo.
+    """
+    if "file" not in request.files:
+        return jsonify({"error": "Adjunte un archivo en el campo 'file'."}), 400
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({"error": "Archivo sin nombre."}), 400
+
+    filename = secure_filename(file.filename)
+    save_path = UPLOADS_DIR / f"catalog_{filename}"
+    file.save(save_path)
+
+    try:
+        result = catalog_import.process_catalog_file(str(save_path))
+        return jsonify(result)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Error en /api/catalog/import")
+        return jsonify({"error": str(exc)}), 500
 
 
 # ──────────────────────────────────────────────────────────────────────────
