@@ -44,7 +44,8 @@ def apply_makro_catalog(
     Devuelve (resultados_actualizados, producto_catálogo, pvp_makro).
     """
     catalog = repository.get_product_by_ean(ean)
-    if catalog is None:
+    makro = build_makro_result(catalog)
+    if makro is None:
         return results, catalog, None
 
     # Evitar duplicados si Makro ya viniera en los resultados.
