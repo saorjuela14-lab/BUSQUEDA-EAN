@@ -74,7 +74,6 @@ class Config:
 # ──────────────────────────────────────────────────────────────────────────
 CATEGORIES: dict[str, dict[str, str]] = {
     "dairy": {"label": "Dairy", "emoji": "🥛", "color": "#4f7fff"},
-    "cheese": {"label": "Cheese", "emoji": "🧀", "color": "#f5a623"},
     "bakery": {"label": "Bakery", "emoji": "🍞", "color": "#d98c3f"},
     "fresh_bakery": {"label": "Fresh Bakery", "emoji": "🥐", "color": "#e0b35c"},
     "cold_meat": {"label": "Cold Meat", "emoji": "🥓", "color": "#f05252"},
@@ -84,8 +83,10 @@ CATEGORIES: dict[str, dict[str, str]] = {
 
 # Subcategorías de referencia (homologación / clasificación).
 SUBCATEGORIES: dict[str, list[str]] = {
-    "dairy": ["Leche", "Yogurt", "Kumis", "Bebidas lácteas", "Crema de leche", "Mantequilla"],
-    "cheese": ["Quesos frescos", "Quesos maduros", "Quesos procesados"],
+    "dairy": [
+        "Leche", "Yogurt", "Kumis", "Bebidas lácteas", "Crema de leche", "Mantequilla",
+        "Quesos frescos", "Quesos maduros", "Quesos procesados",
+    ],
     "bakery": ["Pan tajado", "Pan artesanal", "Pan industrial", "Tostadas", "Galletas panadería"],
     "fresh_bakery": ["Pan fresco", "Croissants", "Hojaldres", "Tortas", "Recién horneados"],
     "cold_meat": ["Jamones", "Mortadelas", "Salchichas", "Chorizos", "Tocineta"],
