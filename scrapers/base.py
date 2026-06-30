@@ -31,6 +31,12 @@ class RetailerResult:
     url: Optional[str] = None
     match_mode: str = "ean"     # "ean" | "description"
     match_score: Optional[float] = None
+    # Productos pesables (VTEX: measurementUnit=kg + unitMultiplier en kg).
+    measurement_unit: Optional[str] = None
+    unit_multiplier: Optional[float] = None
+    is_weight_based: bool = False
+    price_per_kg: Optional[int] = None
+    promo_price_per_kg: Optional[int] = None
     error: Optional[str] = None
 
     def to_dict(self) -> dict:

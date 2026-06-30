@@ -34,6 +34,7 @@ from config import (
 from database import init_db, repository
 from export import export_report
 from services import bulk, pricing_service
+from services.weight import format_weight_for_query, format_weight_label, parse_weight
 
 # ──────────────────────────────────────────────────────────────────────────
 # LOGGING
@@ -133,23 +134,31 @@ def api_search_name():
     en cada ecommerce. Internamente usa una clave sintética estable derivada del
     nombre para poder persistir el histórico sin colisionar con EAN reales.
 
-    Body JSON: { name, cost?, category?, target_margin? }
+    Body JSON: { name, cost?, category?, target_margin?, weight?, weight_unit? }
     """
     data = request.get_json(silent=True) or {}
     name = str(data.get("name", "")).strip()
     if not name:
         return jsonify({"error": "El campo 'name' es obligatorio."}), 400
 
+    weight_g = parse_weight(data.get("weight"), data.get("weight_unit", "g"))
+    search_description = name
+    if weight_g:
+        search_description = f"{name} {format_weight_for_query(weight_g)}"
+
     try:
         report = pricing_service.run_query(
-            _name_key(name),
+            _name_key(name, weight_g),
             cost=_int_or_none(data.get("cost")),
-            description=name,
+            description=search_description,
             category=data.get("category") or None,
             target_margin=_float_or_none(data.get("target_margin")),
+            target_weight_g=weight_g,
         )
         report["search_mode"] = "name"
         report["search_name"] = name
+        if weight_g:
+            report["weight_label"] = format_weight_label(weight_g)
         return jsonify(report)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Error en /api/search-name")
@@ -254,7 +263,7 @@ def api_bulk():
 # ──────────────────────────────────────────────────────────────────────────
 # HELPERS
 # ──────────────────────────────────────────────────────────────────────────
-def _name_key(name: str) -> str:
+def _name_key(name: str, weight_g: float | None = None) -> str:
     """
     Deriva una clave sintética estable a partir del nombre del producto.
 
@@ -262,8 +271,13 @@ def _name_key(name: str) -> str:
     nombre: el mismo nombre genera siempre la misma clave, de modo que el
     histórico se acumula correctamente sin chocar con EAN reales. Cabe en
     String(20) del modelo Product.
+
+    Si se indica peso, se incluye en la clave para separar consultas por cantidad.
     """
-    digest = hashlib.sha1(name.strip().lower().encode("utf-8")).hexdigest()[:12]
+    key = name.strip().lower()
+    if weight_g and weight_g > 0:
+        key += f"|{int(round(weight_g))}g"
+    digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
     return f"N-{digest}"
 
 
