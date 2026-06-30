@@ -109,6 +109,17 @@ async function doSearch() {
   }
 }
 
+function readNameWeight() {
+  const raw = document.getElementById('nameWeightInput').value.trim();
+  if (!raw) return { weight: null, weight_unit: null };
+  const val = parseFloat(raw);
+  if (isNaN(val) || val <= 0) return { weight: null, weight_unit: null };
+  return {
+    weight: val,
+    weight_unit: document.getElementById('nameWeightUnit').value || 'g',
+  };
+}
+
 // ── Consulta por nombre (independiente del EAN) ─────────────
 async function doSearchName() {
   const name = document.getElementById('nameInput').value.trim();
@@ -116,14 +127,18 @@ async function doSearchName() {
   if (!name) { out.innerHTML = '<div class="alert alert-warning">Ingresa el nombre del producto.</div>'; return; }
 
   const margin = parseFloat(document.getElementById('nameMarginInput').value);
+  const { weight, weight_unit } = readNameWeight();
   const body = {
     name,
     cost: parseInt(document.getElementById('nameCostInput').value) || null,
     category: document.getElementById('nameCategorySelect').value,
     target_margin: isNaN(margin) ? null : margin / 100,
+    weight,
+    weight_unit,
   };
 
-  out.innerHTML = '<div class="loading"><div class="spinner-border text-primary"></div><div class="mt-2">Buscando "' + name + '" en los ecommerce...</div></div>';
+  const weightHint = weight ? ` · ${weight} ${weight_unit}` : '';
+  out.innerHTML = '<div class="loading"><div class="spinner-border text-primary"></div><div class="mt-2">Buscando "' + name + '"' + weightHint + ' en los ecommerce...</div></div>';
   try {
     const report = await API.searchName(body);
     if (report.error) { out.innerHTML = `<div class="alert alert-danger">${report.error}</div>`; return; }
@@ -158,8 +173,15 @@ function renderReport(report) {
   const modeBadge = byName
     ? '<span class="badge bg-danger ms-2">Búsqueda por nombre</span>'
     : (report.match_mode === 'description' ? '<span class="badge bg-warning text-dark ms-2">Homologado por descripción</span>' : '');
+  const weightBadge = report.weight_label
+    ? `<span class="badge bg-info text-dark ms-2">Peso: ${report.weight_label}</span>`
+    : '';
+  const weightNote = report.target_weight_g
+    ? `<span class="text-muted fw-normal small"> · precios normalizados a ${report.weight_label || report.target_weight_g + ' g'}</span>`
+    : '';
   // El export re-ejecuta la consulta: en modo nombre necesita la descripción.
   const exportDesc = byName ? report.product_name : (report.match_mode === 'description' ? report.product_name : null);
+  const hasPerKg = found.some(r => r.price_per_kg);
 
   const kpiCards = [
     ['Precio mínimo mercado', fmtCOP(k.min_price), k.leader_retailer, 'text-green'],
@@ -186,6 +208,7 @@ function renderReport(report) {
         <span class="fw-bold ms-2">${report.product_name}</span>
         ${eanLabel}
         ${modeBadge}
+        ${weightBadge}
       </div>
       <button class="btn btn-outline-success btn-sm" onclick='exportExcel(${JSON.stringify(report.ean)}, ${report.cost}, ${JSON.stringify(report.category)}, ${JSON.stringify(exportDesc)})'>
         <i class="bi bi-file-earmark-excel"></i> Exportar Excel
@@ -197,7 +220,7 @@ function renderReport(report) {
 
   // Distribución de precios (basada en el precio regular, sin descuento)
   const sorted = [...found].sort((a, b) => (a.effective_price||a.price) - (b.effective_price||b.price));
-  html += `<div class="card mt-3"><div class="card-body"><h6 class="card-title">Distribución de precios por cadena <span class="text-muted fw-normal small">(precio regular, sin descuento)</span></h6>`;
+  html += `<div class="card mt-3"><div class="card-body"><h6 class="card-title">Distribución de precios por cadena <span class="text-muted fw-normal small">(precio regular, sin descuento${weightNote})</span></h6>`;
   sorted.forEach(r => {
     const reg = r.effective_price || r.price || r.promo_price;
     const w = Math.max(8, Math.round((reg / (maxEff * 1.05)) * 100));
@@ -205,24 +228,29 @@ function renderReport(report) {
     const isMakro = r.retailer === 'makro';
     const isMin = !isMakro && reg === k.min_price;
     const makroTag = isMakro ? ' <span class="badge bg-danger">MAKRO</span>' : '';
+    const perKg = r.price_per_kg ? `<span class="text-muted small ms-1">(${fmtCOP(r.price_per_kg)}/kg)</span>` : '';
     html += `<div class="pbar-row">
       <div class="pbar-name">${isMin ? '🏆 ' : (isMakro ? '🏠 ' : '')}${r.retailer_name}${makroTag}</div>
-      <div class="pbar-track"><div class="pbar-fill" style="width:${w}%;background:${color}">${fmtCOP(reg)}</div></div>
+      <div class="pbar-track"><div class="pbar-fill" style="width:${w}%;background:${color}">${fmtCOP(reg)}${perKg}</div></div>
       ${r.promo_price ? `<span class="pbar-tag" title="Precio con descuento de la competencia">PROMO ${fmtCOP(r.promo_price)}</span>` : '<span style="width:46px"></span>'}
     </div>`;
   });
   html += `</div></div>`;
 
   // Tabla de márgenes
-  html += `<h2 class="section-title">Comparativo de márgenes <span class="text-muted fw-normal small">(margen calculado sobre el precio regular)</span></h2>
+  const perKgHeader = hasPerKg ? '<th>$/kg</th>' : '';
+  html += `<h2 class="section-title">Comparativo de márgenes <span class="text-muted fw-normal small">(margen calculado sobre el precio regular${weightNote})</span></h2>
     <div class="card"><div class="card-body table-responsive">
     <table class="table table-sm align-middle"><thead><tr>
-      <th>Retailer</th><th>Precio regular</th><th>Precio con descuento</th><th>Costo</th><th>Margen $</th><th>Margen %</th></tr></thead><tbody>
+      <th>Retailer</th><th>Precio regular</th><th>Precio con descuento</th>${perKgHeader}<th>Costo</th><th>Margen $</th><th>Margen %</th></tr></thead><tbody>
     ${report.margins.filter(m => m.found).map(m => {
       const isMakro = m.retailer === 'makro';
+      const res = found.find(r => r.retailer === m.retailer) || {};
+      const perKgCell = hasPerKg ? `<td>${res.price_per_kg ? fmtCOP(res.price_per_kg) : '<span class="text-muted">—</span>'}</td>` : '';
       return `<tr class="${isMakro ? 'table-danger' : ''}">
       <td>${isMakro ? '<strong>Makro</strong> <span class="badge bg-danger">PVP</span>' : m.retailer}</td><td>${fmtCOP(m.effective_price)}</td>
       <td>${m.promo_price ? `<span class="text-red fw-bold">${fmtCOP(m.promo_price)}</span>` : '<span class="text-muted">—</span>'}</td>
+      ${perKgCell}
       <td>${fmtCOP(report.cost)}</td>
       <td>${fmtCOP(m.margin_value)}</td><td class="${marginColor(m.margin_pct)} fw-bold">${fmtPct(m.margin_pct)}</td></tr>`;
     }).join('')}
