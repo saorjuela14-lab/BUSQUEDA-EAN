@@ -37,6 +37,29 @@ def init_db() -> None:
     from . import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    _migrate_schema()
+
+
+def _migrate_schema() -> None:
+    """Añade columnas nuevas en bases SQLite existentes (sin Alembic)."""
+    if not Config.DATABASE_URL.startswith("sqlite"):
+        return
+    from sqlalchemy import inspect, text
+
+    insp = inspect(engine)
+    if "products" not in insp.get_table_names():
+        return
+    existing = {c["name"] for c in insp.get_columns("products")}
+    alters = []
+    if "pvp" not in existing:
+        alters.append("ALTER TABLE products ADD COLUMN pvp INTEGER")
+    if "catalog_updated_at" not in existing:
+        alters.append("ALTER TABLE products ADD COLUMN catalog_updated_at DATETIME")
+    if not alters:
+        return
+    with engine.begin() as conn:
+        for stmt in alters:
+            conn.execute(text(stmt))
 
 
 @contextmanager

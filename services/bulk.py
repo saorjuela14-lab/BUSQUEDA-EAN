@@ -231,6 +231,7 @@ def process_bulk_file(
                     "margin_validation": margin_check,
                     "kpis": report["kpis"],
                     "home_margin": report.get("home_margin"),
+                    "home_position": report.get("home_position"),
                     "makro_pvp": report.get("makro_pvp"),
                     "alerts": report["alerts"],
                     "query_id": report.get("query_id"),
