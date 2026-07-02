@@ -171,7 +171,12 @@
       <!-- ── VIEW: BULK ── -->
       <section class="view d-none" id="view-bulk">
         <h1 class="page-title">Carga masiva</h1>
-        <p class="page-sub">Procesa cientos de productos desde un Excel con columnas <code>EAN</code> y <code>Costo</code>.</p>
+        <p class="page-sub">
+          Procesa cientos de productos desde un Excel. Columnas: <code>EAN</code> (obligatorio),
+          <code>Costo</code>, <code>Descripcion</code>, <code>Categoria</code> y
+          <code>Margen_Objetivo</code> (por fila, en %). El margen del formulario solo aplica
+          a filas que no traen margen propio.
+        </p>
         <div class="card"><div class="card-body">
           <div class="row g-3 align-items-end">
             <div class="col-md-6">
@@ -179,8 +184,9 @@
               <input id="bulkFile" type="file" accept=".xlsx,.xls" class="form-control" />
             </div>
             <div class="col-md-3">
-              <label class="form-label">Margen objetivo %</label>
+              <label class="form-label">Margen por defecto %</label>
               <input id="bulkMargin" type="number" class="form-control" placeholder="15" />
+              <div class="form-text">Solo si la fila no trae margen</div>
             </div>
             <div class="col-md-3 d-grid">
               <button id="bulkBtn" class="btn btn-primary"><i class="bi bi-upload"></i> Procesar</button>

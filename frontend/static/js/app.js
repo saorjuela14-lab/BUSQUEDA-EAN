@@ -342,13 +342,26 @@ async function doBulk() {
   if (res.error) { out.innerHTML = `<div class="alert alert-danger">${res.error}</div>`; return; }
 
   let html = `<div class="alert alert-success">Procesados: <strong>${res.processed}</strong> productos.</div>`;
+  if (res.below_target_count > 0) {
+    html += `<div class="alert alert-warning"><strong>${res.below_target_count}</strong> producto(s) con margen actual por debajo del objetivo.</div>`;
+  }
   if (res.errors && res.errors.length) html += `<div class="alert alert-warning">${res.errors.join('<br>')}</div>`;
   if (res.reports && res.reports.length) {
     html += `<div class="table-responsive"><table class="table table-sm"><thead><tr>
-      <th>EAN</th><th>Producto</th><th>Mín</th><th>Prom</th><th>Máx</th><th>Margen Makro</th></tr></thead><tbody>
-      ${res.reports.map(r => `<tr><td>${r.ean}</td><td>${r.product_name||'—'}</td>
-        <td>${fmtCOP(r.kpis.min_price)}</td><td>${fmtCOP(r.kpis.avg_price)}</td><td>${fmtCOP(r.kpis.max_price)}</td>
-        <td class="${marginColor(r.home_margin && r.home_margin.margin_pct)}">${r.home_margin ? fmtPct(r.home_margin.margin_pct) : '—'}</td></tr>`).join('')}
+      <th>EAN</th><th>Producto</th><th>Margen obj.</th><th>Margen actual</th><th>Precio obj.</th><th>Validación</th><th>Mín</th><th>Prom</th></tr></thead><tbody>
+      ${res.reports.map(r => {
+        const v = r.margin_validation || {};
+        const valLabel = v.status === 'met' ? '✅ Cumple'
+          : v.status === 'below' ? '⚠️ Bajo objetivo'
+          : v.status === 'no_data' ? '— Sin datos' : '—';
+        const valClass = v.status === 'below' ? 'text-red fw-bold' : v.status === 'met' ? 'text-green' : '';
+        return `<tr><td>${r.ean}</td><td>${r.product_name||'—'}</td>
+        <td>${fmtPct(r.target_margin_pct)}</td>
+        <td class="${marginColor(v.actual_margin_pct)}">${fmtPct(v.actual_margin_pct)}</td>
+        <td>${fmtCOP(r.target_price)}</td>
+        <td class="${valClass}" title="${v.message || ''}">${valLabel}</td>
+        <td>${fmtCOP(r.kpis.min_price)}</td><td>${fmtCOP(r.kpis.avg_price)}</td></tr>`;
+      }).join('')}
       </tbody></table></div>`;
   }
   out.innerHTML = html;

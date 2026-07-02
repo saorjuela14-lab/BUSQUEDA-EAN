@@ -240,7 +240,13 @@ def api_export():
 # ──────────────────────────────────────────────────────────────────────────
 @app.post("/api/bulk")
 def api_bulk():
-    """Procesa un Excel de carga masiva (campo de formulario 'file')."""
+    """
+    Procesa un Excel de carga masiva (campo de formulario 'file').
+
+    El margen objetivo puede definirse por fila (columna Margen_Objetivo en el Excel).
+    El campo de formulario `target_margin` solo se usa como valor por defecto cuando
+    la fila no trae margen propio.
+    """
     if "file" not in request.files:
         return jsonify({"error": "Adjunte un archivo en el campo 'file'."}), 400
     file = request.files["file"]
