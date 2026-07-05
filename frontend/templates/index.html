@@ -48,7 +48,7 @@
           <div class="card filter-card">
             <div class="card-body">
               <div class="row g-3 align-items-end">
-                <div class="col-md-3">
+                <div class="col-md-2">
                   <label class="form-label">Categoría</label>
                   <select id="categorySelect" class="form-select"></select>
                 </div>
@@ -64,13 +64,21 @@
                   <label class="form-label">Margen objetivo %</label>
                   <input id="marginInput" type="number" class="form-control" placeholder="15" />
                 </div>
-                <div class="col-md-2 d-grid">
+                <div class="col-md-3 d-grid">
                   <button id="searchBtn" class="btn btn-primary"><i class="bi bi-search"></i> Buscar</button>
                 </div>
               </div>
-              <div class="mt-3">
-                <label class="form-label">Descripción (homologación si el EAN no existe)</label>
-                <input id="descInput" class="form-control" placeholder="Ej: Leche Alpina Entera 1100 ml" />
+              <div class="row g-3 align-items-end mt-1">
+                <div class="col-md-6">
+                  <label class="form-label">Descripción (homologación si el EAN no existe)</label>
+                  <input id="descInput" class="form-control" placeholder="Ej: Leche Alpina Entera 1100 ml" />
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Tienda / ciudad</label>
+                  <select id="locationSelect" class="form-select">
+                    <option value="">Nacional (sin regionalizar)</option>
+                  </select>
+                </div>
               </div>
               <div id="eanHints" class="ean-hints mt-3"></div>
             </div>
@@ -84,7 +92,8 @@
               <p class="text-muted small mb-3">
                 <i class="bi bi-info-circle"></i>
                 ¿No tienes el EAN? Busca por nombre y homologamos en cada ecommerce.
-                Para productos <strong>pesables</strong> (pechuga, arándanos, frutas a granel), indica el peso para comparar precios equivalentes.
+                Ideal para <strong>Fruver</strong> a granel. Indica peso para productos pesables
+                y selecciona tienda/ciudad para precios regionalizados (VTEX).
               </p>
               <div class="row g-3 align-items-end">
                 <div class="col-md-2">
@@ -118,6 +127,17 @@
                 <div class="col-md-3">
                   <label class="form-label">Margen objetivo %</label>
                   <input id="nameMarginInput" type="number" class="form-control" placeholder="15" />
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Tienda / ciudad</label>
+                  <select id="nameLocationSelect" class="form-select">
+                    <option value="">Nacional</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Comparar varias ciudades <span class="text-muted">(opcional, separadas por coma)</span></label>
+                  <input id="nameMultiCityInput" class="form-control" placeholder="Ej: Bogotá, Medellín, Cali o 1, 5, 18" />
+                  <div class="form-text">Si se llena, ignora la tienda individual y compara en todas.</div>
                 </div>
               </div>
             </div>
@@ -155,7 +175,7 @@
         <div class="card"><div class="card-body table-responsive">
           <table class="table table-hover align-middle" id="historyTable">
             <thead><tr>
-              <th>Fecha</th><th>Producto</th><th>EAN</th><th>Mín</th><th>Prom</th><th>Máx</th><th>Margen %</th><th></th>
+              <th>Fecha</th><th>Producto</th><th>EAN</th><th>Ciudad</th><th>Mín</th><th>Prom</th><th>Máx</th><th>Margen %</th><th></th>
             </tr></thead>
             <tbody></tbody>
           </table>
@@ -196,23 +216,27 @@
       <section class="view d-none" id="view-bulk">
         <h1 class="page-title">Carga masiva</h1>
         <p class="page-sub">
-          Procesa cientos de productos desde un Excel. Columnas: <code>EAN</code> (obligatorio),
-          <code>Costo</code>, <code>Descripcion</code>, <code>Categoria</code> y
-          <code>Margen_Objetivo</code> (por fila, en %). El margen del formulario solo aplica
-          a filas que no traen margen propio.
+          Procesa cientos de productos desde un Excel. Columnas: <code>EAN</code> o <code>Descripcion</code>/<code>Nombre</code>
+          (Fruver sin código de barras), <code>Costo</code>, <code>Categoria</code> (usar <code>fruver</code>),
+          <code>Ciudad</code> (código tienda o nombre), <code>Margen_Objetivo</code> (%).
         </p>
         <div class="card"><div class="card-body">
           <div class="row g-3 align-items-end">
-            <div class="col-md-6">
+            <div class="col-md-5">
               <label class="form-label">Archivo Excel (.xlsx)</label>
               <input id="bulkFile" type="file" accept=".xlsx,.xls" class="form-control" />
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
               <label class="form-label">Margen por defecto %</label>
               <input id="bulkMargin" type="number" class="form-control" placeholder="15" />
               <div class="form-text">Solo si la fila no trae margen</div>
             </div>
-            <div class="col-md-3 d-grid">
+            <div class="col-md-3">
+              <label class="form-label">Ciudades / tiendas</label>
+              <input id="bulkCities" class="form-control" placeholder="Bogotá, Medellín o 1,5,18" />
+              <div class="form-text">Opcional si el Excel trae columna Ciudad</div>
+            </div>
+            <div class="col-md-2 d-grid">
               <button id="bulkBtn" class="btn btn-primary"><i class="bi bi-upload"></i> Procesar</button>
             </div>
           </div>

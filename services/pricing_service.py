@@ -16,7 +16,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from config import HOME_RETAILER, Config
+from config import HOME_RETAILER, Config, canonical_location_key, resolve_location
 from database import repository
 
 from . import alerts as alerts_mod
@@ -27,9 +27,9 @@ from .weight import enrich_result_weight_metadata, normalize_results_for_weight
 from scrapers import scrape_all
 
 
-def _previous_avg(ean: str) -> Optional[int]:
-    """Promedio de la última consulta histórica para detectar variaciones."""
-    history = repository.get_history(ean=ean, limit=1)
+def _previous_avg(ean: str, city: Optional[str] = None) -> Optional[int]:
+    """Promedio de la última consulta histórica (misma ciudad) para detectar variaciones."""
+    history = repository.get_history(ean=ean, city=city, limit=1)
     if history:
         return history[0].get("avg_price")
     return None
@@ -45,21 +45,36 @@ def run_query(
     target_weight_g: Optional[float] = None,
     retailer_keys: Optional[list[str]] = None,
     priority: Optional[int] = None,
+    city: Optional[str] = None,
     persist: bool = True,
 ) -> dict:
     """
     Ejecuta una consulta de comparación completa y devuelve un informe.
 
+    `city` (código de tienda Makro, ej. 18, o nombre de ciudad, ej. "Bogotá" —
+    ver config.STORES / config.resolve_location) regionaliza el scraping
+    en retailers VTEX que tengan la función "Region" activa. `category`
+    ajusta la homologación por descripción — Fruver usa un umbral más
+    permisivo (ver services/matching.py).
+
     El informe contiene: producto, resultados por retailer, KPIs, márgenes,
     estrategias, alertas y metadatos. Si `persist` es True, guarda el histórico.
     """
-    previous_avg = _previous_avg(ean) if persist else None
+    # Normaliza a una clave estable (ej. "18" o "bogota") para que el
+    # histórico compare siempre igual sin importar cómo se escribió la
+    # ubicación. Si no se reconoce (o es una tienda cerrada), se ignora y la
+    # consulta corre sin regionalizar.
+    city = canonical_location_key(city) if city else None
+
+    previous_avg = _previous_avg(ean, city) if persist else None
 
     raw_results = scrape_all(
         ean,
         description=description,
         retailer_keys=retailer_keys,
         priority=priority,
+        city=city,
+        category=category,
     )
     results = [r.to_dict() for r in raw_results]
 
@@ -117,6 +132,7 @@ def run_query(
         "home_position": home_position,
         "target_weight_g": target_weight_g,
         "match_mode": match_mode,
+        "city": city,
         "timestamp": datetime.utcnow().isoformat(),
         "results": results,
         "kpis": kpis,
@@ -135,6 +151,7 @@ def run_query(
                 "category": category,
                 "product_name": product_name,
                 "match_mode": match_mode,
+                "city": city,
                 "kpis": kpis,
                 "results": results,
                 "alerts": detected_alerts,
@@ -143,3 +160,80 @@ def run_query(
         report["query_id"] = saved.get("id")
 
     return report
+
+
+def run_query_multi_city(
+    ean: str,
+    cities: list[str],
+    cost: Optional[int] = None,
+    description: Optional[str] = None,
+    *,
+    category: Optional[str] = None,
+    target_margin: Optional[float] = None,
+    target_weight_g: Optional[float] = None,
+    retailer_keys: Optional[list[str]] = None,
+    priority: Optional[int] = None,
+    persist: bool = True,
+) -> dict:
+    """
+    Ejecuta la misma consulta en varias ciudades/tiendas y devuelve un informe
+    consolidado: uno por ubicación + una tabla comparativa de KPIs.
+
+    Útil para el caso de Fruver: un mismo producto puede tener precio
+    distinto de mercado (y de Makro) según la ciudad/tienda.
+
+    Ubicaciones no reconocidas (o tiendas cerradas, ej. 21 - Puente Aranda)
+    se omiten y quedan registradas en `report["skipped"]`.
+    """
+    by_city: dict[str, dict] = {}
+    skipped: list[dict] = []
+    for city in cities:
+        if resolve_location(city) is None:
+            skipped.append(
+                {
+                    "city": city,
+                    "reason": "Ubicación no reconocida o tienda cerrada (ver config.STORES).",
+                }
+            )
+            continue
+        by_city[city] = run_query(
+            ean,
+            cost=cost,
+            description=description,
+            category=category,
+            target_margin=target_margin,
+            target_weight_g=target_weight_g,
+            retailer_keys=retailer_keys,
+            priority=priority,
+            city=city,
+            persist=persist,
+        )
+
+    comparison_rows = []
+    for city, report in by_city.items():
+        loc = resolve_location(city) or {}
+        comparison_rows.append(
+            {
+                "city": city,
+                "city_label": loc.get("city") or city,
+                "store_code": loc.get("store_code"),
+                "store_name": loc.get("store_name"),
+                "nse": loc.get("nse"),
+                "makro_pvp": report.get("makro_pvp"),
+                "min_price": report.get("kpis", {}).get("min_price"),
+                "avg_price": report.get("kpis", {}).get("avg_price"),
+                "max_price": report.get("kpis", {}).get("max_price"),
+                "leader_retailer": report.get("kpis", {}).get("leader_retailer"),
+                "home_position": (report.get("home_position") or {}).get("status"),
+            }
+        )
+
+    return {
+        "ean": ean,
+        "product_name": next(
+            (r.get("product_name") for r in by_city.values() if r.get("product_name")), ean
+        ),
+        "cities": comparison_rows,
+        "reports_by_city": by_city,
+        "skipped": skipped,
+    }

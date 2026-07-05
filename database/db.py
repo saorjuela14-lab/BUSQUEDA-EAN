@@ -47,14 +47,26 @@ def _migrate_schema() -> None:
     from sqlalchemy import inspect, text
 
     insp = inspect(engine)
-    if "products" not in insp.get_table_names():
-        return
-    existing = {c["name"] for c in insp.get_columns("products")}
+    table_names = insp.get_table_names()
     alters = []
-    if "pvp" not in existing:
-        alters.append("ALTER TABLE products ADD COLUMN pvp INTEGER")
-    if "catalog_updated_at" not in existing:
-        alters.append("ALTER TABLE products ADD COLUMN catalog_updated_at DATETIME")
+
+    if "products" in table_names:
+        existing = {c["name"] for c in insp.get_columns("products")}
+        if "pvp" not in existing:
+            alters.append("ALTER TABLE products ADD COLUMN pvp INTEGER")
+        if "catalog_updated_at" not in existing:
+            alters.append("ALTER TABLE products ADD COLUMN catalog_updated_at DATETIME")
+
+    if "price_queries" in table_names:
+        existing = {c["name"] for c in insp.get_columns("price_queries")}
+        if "city" not in existing:
+            alters.append("ALTER TABLE price_queries ADD COLUMN city VARCHAR(20)")
+
+    if "price_results" in table_names:
+        existing = {c["name"] for c in insp.get_columns("price_results")}
+        if "city" not in existing:
+            alters.append("ALTER TABLE price_results ADD COLUMN city VARCHAR(20)")
+
     if not alters:
         return
     with engine.begin() as conn:

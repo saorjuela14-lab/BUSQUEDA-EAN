@@ -12,6 +12,7 @@ Ejemplo: "Leche Alpina Entera 1100 ml" -> coincidencia 96%.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
@@ -52,10 +53,37 @@ class MatchResult:
     score: float  # 0-100
 
 
-def _normalize(text: str) -> str:
-    text = text.lower()
+# Palabras de relleno sin valor discriminante entre presentaciones de un mismo
+# producto (unidad de venta, conectores). Quitarlas antes de comparar evita que
+# "AGUACATE KG" pierda similitud frente a "Aguacate Hass x Kg Granel" solo por
+# tokens que no describen el producto en sí. No incluye variedades/marcas
+# porque esas SÍ pueden importar para otras categorías.
+_NOISE_WORDS = {
+    "x", "de", "del", "la", "el", "los", "las",
+    "granel", "unidad", "und", "un", "u",
+    "empaque", "empacado", "import", "importado",
+    "fresco", "fresca", "nacional",
+}
+
+
+def _strip_accents(text: str) -> str:
+    """Quita tildes/diéresis y normaliza ñ→n para comparación robusta en español.
+
+    Bug corregido: antes "PLATANO VERDE" vs "Plátano Verde" scoreaba 63/100 en
+    vez de ~100 solo por la tilde, lo que rechazaba homologaciones válidas de
+    Fruver bajo el umbral de similitud.
+    """
+    normalized = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in normalized if not unicodedata.combining(c))
+
+
+def _normalize(text: str, *, strip_noise: bool = False) -> str:
+    text = _strip_accents(text.lower())
     text = re.sub(r"[^\w\s.,]", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+", " ", text).strip()
+    if strip_noise:
+        text = " ".join(w for w in text.split() if w not in _NOISE_WORDS)
+    return text
 
 
 def extract_size(text: str) -> Optional[tuple[str, float]]:
@@ -95,13 +123,33 @@ def _size_penalty(query: str, candidate: str) -> float:
     return min(rel_diff, 1.0)
 
 
-def similarity(query: str, candidate: str) -> float:
+def resolve_threshold(category: Optional[str] = None) -> int:
+    """
+    Umbral mínimo de homologación según categoría.
+
+    Fruver usa un umbral más bajo: nombres cortos/genéricos ("AGUACATE KG")
+    contra nombres comerciales con variedad ("Aguacate Hass x Kg") pierden
+    similitud sin ser productos distintos. Categorías con presentaciones que
+    SÍ deben distinguirse por tamaño (lácteos, etc.) mantienen el umbral base.
+    """
+    if category and category.strip().lower() == "fruver":
+        return Config.MATCH_THRESHOLD_FRUVER
+    return Config.MATCH_THRESHOLD
+
+
+def similarity(query: str, candidate: str, *, category: Optional[str] = None) -> float:
     """
     Score de similitud 0-100 entre dos descripciones de producto.
 
-    Combina similitud textual (rapidfuzz) con penalización por tamaño.
+    Combina similitud textual (rapidfuzz, sin tildes) con penalización por
+    tamaño. Para Fruver además se descartan palabras de relleno (granel,
+    unidad, x, import, etc.) que no aportan al match del producto en sí.
     """
-    base = fuzz.token_set_ratio(_normalize(query), _normalize(candidate))
+    is_fruver = bool(category and category.strip().lower() == "fruver")
+    base = fuzz.token_set_ratio(
+        _normalize(query, strip_noise=is_fruver),
+        _normalize(candidate, strip_noise=is_fruver),
+    )
     penalty = _size_penalty(query, candidate)
     # La penalización por tamaño reduce hasta un 40% del score textual.
     return round(base * (1 - 0.4 * penalty), 1)
@@ -111,25 +159,31 @@ def best_match(
     query: str,
     candidates: Sequence[MatchCandidate],
     threshold: int | None = None,
+    *,
+    category: Optional[str] = None,
 ) -> Optional[MatchResult]:
     """
     Devuelve el mejor candidato por encima del umbral, o None.
 
     Resuelve también el caso "EAN en múltiples presentaciones": entre varios
     candidatos del mismo retailer, elige el de mayor score (más cercano).
+    Si no se pasa `threshold` explícito, se resuelve según `category`
+    (Fruver usa un umbral más permisivo, ver `resolve_threshold`).
     """
     if not candidates:
         return None
-    threshold = Config.MATCH_THRESHOLD if threshold is None else threshold
+    threshold = resolve_threshold(category) if threshold is None else threshold
 
-    scored = [MatchResult(c, similarity(query, c.name)) for c in candidates]
+    scored = [MatchResult(c, similarity(query, c.name, category=category)) for c in candidates]
     scored.sort(key=lambda m: m.score, reverse=True)
     top = scored[0]
     return top if top.score >= threshold else None
 
 
-def rank_matches(query: str, candidates: Sequence[MatchCandidate]) -> list[MatchResult]:
+def rank_matches(
+    query: str, candidates: Sequence[MatchCandidate], *, category: Optional[str] = None
+) -> list[MatchResult]:
     """Devuelve todos los candidatos ordenados por score descendente."""
-    scored = [MatchResult(c, similarity(query, c.name)) for c in candidates]
+    scored = [MatchResult(c, similarity(query, c.name, category=category)) for c in candidates]
     scored.sort(key=lambda m: m.score, reverse=True)
     return scored

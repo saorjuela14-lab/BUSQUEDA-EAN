@@ -11,6 +11,7 @@ from typing import Optional
 
 from sqlalchemy import desc, func, select
 
+from config import canonical_location_key
 from .db import get_session
 from .models import Alert, PriceQuery, PriceResult, Product
 
@@ -155,6 +156,7 @@ def save_query(payload: dict) -> dict:
             ean=payload["ean"],
             cost=payload.get("cost"),
             match_mode=payload.get("match_mode", "ean"),
+            city=payload.get("city"),
             min_price=kpis.get("min_price"),
             max_price=kpis.get("max_price"),
             avg_price=kpis.get("avg_price"),
@@ -178,6 +180,7 @@ def save_query(payload: dict) -> dict:
                     product_name=r.get("product_name"),
                     url=r.get("url"),
                     match_score=r.get("match_score"),
+                    city=r.get("city") or payload.get("city"),
                 )
             )
 
@@ -199,14 +202,16 @@ def save_query(payload: dict) -> dict:
         return result
 
 
-def get_history(ean: str | None = None, limit: int = 100) -> list[dict]:
-    """Devuelve el histórico de consultas, opcionalmente filtrado por EAN."""
+def get_history(ean: str | None = None, city: str | None = None, limit: int = 100) -> list[dict]:
+    """Devuelve el histórico de consultas, opcionalmente filtrado por EAN y/o ciudad/tienda."""
     with get_session() as s:
-        stmt = select(PriceQuery).order_by(desc(PriceQuery.created_at)).limit(limit)
+        stmt = select(PriceQuery)
         if ean:
-            stmt = select(PriceQuery).where(PriceQuery.ean == ean).order_by(
-                desc(PriceQuery.created_at)
-            ).limit(limit)
+            stmt = stmt.where(PriceQuery.ean == ean)
+        if city:
+            canonical_city = canonical_location_key(city) or city
+            stmt = stmt.where(PriceQuery.city == canonical_city)
+        stmt = stmt.order_by(desc(PriceQuery.created_at)).limit(limit)
         rows = s.scalars(stmt).all()
         out = []
         for q in rows:
@@ -231,18 +236,18 @@ def get_query_detail(query_id: int) -> Optional[dict]:
         return d
 
 
-def get_price_trend(ean: str, limit: int = 30) -> list[dict]:
-    """Serie temporal de KPIs para un EAN (para gráficos de tendencia)."""
+def get_price_trend(ean: str, city: str | None = None, limit: int = 30) -> list[dict]:
+    """Serie temporal de KPIs para un EAN (para gráficos de tendencia), opcional por ciudad/tienda."""
     with get_session() as s:
-        stmt = (
-            select(PriceQuery)
-            .where(PriceQuery.ean == ean)
-            .order_by(PriceQuery.created_at)
-            .limit(limit)
-        )
+        stmt = select(PriceQuery).where(PriceQuery.ean == ean)
+        if city:
+            canonical_city = canonical_location_key(city) or city
+            stmt = stmt.where(PriceQuery.city == canonical_city)
+        stmt = stmt.order_by(PriceQuery.created_at).limit(limit)
         return [
             {
                 "date": q.created_at.isoformat() if q.created_at else None,
+                "city": q.city,
                 "min_price": q.min_price,
                 "avg_price": q.avg_price,
                 "max_price": q.max_price,

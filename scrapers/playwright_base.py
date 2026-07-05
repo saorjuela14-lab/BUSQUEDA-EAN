@@ -96,11 +96,17 @@ class PlaywrightScraper(BaseScraper):
                 results.append((name, price))
         return results
 
-    def _fetch_by_ean(self, ean: str) -> Optional[RetailerResult]:
+    def _fetch_by_ean(self, ean: str, city: Optional[str] = None) -> Optional[RetailerResult]:
+        # Nota: no confirmamos aún un parámetro público de ciudad/regionId
+        # para estos sitios (D1, Ara, Ísimo, Farmatodo); `city` se acepta por
+        # consistencia de interfaz pero por ahora no cambia la URL consultada.
+        # Si el sitio corrige esto vía geolocalización/cookie, este es el
+        # punto para inyectarlo (ver `_apply_region` en scrapers/vtex.py como
+        # referencia del patrón).
         html = self._render(self._build_search_url(ean))
         items = self._extract(html)
         if not items:
-            return RetailerResult(retailer=self.key, retailer_name=self.name, found=False)
+            return RetailerResult(retailer=self.key, retailer_name=self.name, found=False, city=city)
         name, price = items[0]
         return RetailerResult(
             retailer=self.key,
@@ -110,9 +116,12 @@ class PlaywrightScraper(BaseScraper):
             product_name=name,
             url=self._build_search_url(ean),
             match_mode="ean",
+            city=city,
         )
 
-    def _fetch_candidates(self, description: str) -> list[tuple[MatchCandidate, RetailerResult]]:
+    def _fetch_candidates(
+        self, description: str, city: Optional[str] = None
+    ) -> list[tuple[MatchCandidate, RetailerResult]]:
         html = self._render(self._build_search_url(description))
         out: list[tuple[MatchCandidate, RetailerResult]] = []
         for name, price in self._extract(html):
@@ -123,6 +132,7 @@ class PlaywrightScraper(BaseScraper):
                 price=price,
                 product_name=name,
                 url=self._build_search_url(description),
+                city=city,
             )
             out.append((MatchCandidate(name=name, payload={}), result))
         return out

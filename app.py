@@ -12,7 +12,6 @@ Ejecutar con:
 """
 from __future__ import annotations
 
-import hashlib
 import logging
 from pathlib import Path
 
@@ -30,10 +29,12 @@ from config import (
     TEMPLATES_DIR,
     UPLOADS_DIR,
     Config,
+    active_stores,
 )
 from database import init_db, repository
 from export import export_report
 from services import bulk, catalog_import, pricing_service
+from services.keys import synthetic_key
 from services.weight import format_weight_for_query, format_weight_label, parse_weight
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -80,13 +81,14 @@ def index():
 # ──────────────────────────────────────────────────────────────────────────
 @app.get("/api/config")
 def api_config():
-    """Devuelve categorías, subcategorías y retailers para poblar la UI."""
+    """Devuelve categorías, subcategorías, retailers y tiendas Makro para poblar la UI."""
     return jsonify(
         {
             "categories": CATEGORIES,
             "subcategories": SUBCATEGORIES,
             "retailers": RETAILERS,
             "home_retailer": HOME_RETAILER,
+            "stores": active_stores(),
         }
     )
 
@@ -114,6 +116,7 @@ def api_search():
             category=data.get("category") or None,
             target_margin=_float_or_none(data.get("target_margin")),
             priority=_int_or_none(data.get("priority")),
+            city=(data.get("city") or None),
         )
         report["search_mode"] = "ean"
         return jsonify(report)
@@ -131,10 +134,19 @@ def api_search_name():
     Ejecuta una consulta de comparación buscando SOLO por nombre del producto.
 
     Pensado para cuando no se tiene el EAN: homologa el producto por descripción
-    en cada ecommerce. Internamente usa una clave sintética estable derivada del
-    nombre para poder persistir el histórico sin colisionar con EAN reales.
+    en cada ecommerce (típico en Fruver a granel). Internamente usa una clave
+    sintética estable derivada del nombre para poder persistir el histórico
+    sin colisionar con EAN reales.
 
-    Body JSON: { name, cost?, category?, target_margin?, weight?, weight_unit? }
+    Body JSON: { name, cost?, category?, target_margin?, weight?, weight_unit?,
+                 city?, cities? }
+
+    - `city`: una sola ciudad o código de tienda (ej. "Bogotá" o 18) para
+      regionalizar la búsqueda.
+    - `cities`: lista de ciudades/tiendas (ej. ["Bogotá","Medellín"] o [1,5,18])
+      para comparar el mismo producto en varias ubicaciones a la vez (ver
+      config.STORES). Si se envía `cities`, tiene prioridad sobre `city` y la respuesta incluye un
+      informe por ciudad más una tabla comparativa.
     """
     data = request.get_json(silent=True) or {}
     name = str(data.get("name", "")).strip()
@@ -146,14 +158,32 @@ def api_search_name():
     if weight_g:
         search_description = f"{name} {format_weight_for_query(weight_g)}"
 
+    cities = data.get("cities")
     try:
+        if cities:
+            report = pricing_service.run_query_multi_city(
+                synthetic_key(name, weight_g),
+                cities=[str(c).strip() for c in cities],
+                cost=_int_or_none(data.get("cost")),
+                description=search_description,
+                category=data.get("category") or None,
+                target_margin=_float_or_none(data.get("target_margin")),
+                target_weight_g=weight_g,
+            )
+            report["search_mode"] = "name_multi_city"
+            report["search_name"] = name
+            if weight_g:
+                report["weight_label"] = format_weight_label(weight_g)
+            return jsonify(report)
+
         report = pricing_service.run_query(
-            _name_key(name, weight_g),
+            synthetic_key(name, weight_g),
             cost=_int_or_none(data.get("cost")),
             description=search_description,
             category=data.get("category") or None,
             target_margin=_float_or_none(data.get("target_margin")),
             target_weight_g=weight_g,
+            city=(data.get("city") or None),
         )
         report["search_mode"] = "name"
         report["search_name"] = name
@@ -171,7 +201,10 @@ def api_search_name():
 @app.get("/api/history")
 def api_history():
     ean = request.args.get("ean")
-    return jsonify(repository.get_history(ean=ean, limit=int(request.args.get("limit", 100))))
+    city = request.args.get("city")
+    return jsonify(
+        repository.get_history(ean=ean, city=city, limit=int(request.args.get("limit", 100)))
+    )
 
 
 @app.get("/api/history/<int:query_id>")
@@ -184,7 +217,8 @@ def api_history_detail(query_id: int):
 
 @app.get("/api/trend/<ean>")
 def api_trend(ean: str):
-    return jsonify(repository.get_price_trend(ean))
+    city = request.args.get("city")
+    return jsonify(repository.get_price_trend(ean, city=city))
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -261,6 +295,7 @@ def api_export():
             category=data.get("category") or None,
             target_margin=_float_or_none(data.get("target_margin")),
             priority=_int_or_none(data.get("priority")),
+            city=(data.get("city") or None),
             persist=False,
         )
         path = export_report(report)
@@ -278,9 +313,15 @@ def api_bulk():
     """
     Procesa un Excel de carga masiva (campo de formulario 'file').
 
-    El margen objetivo puede definirse por fila (columna Margen_Objetivo en el Excel).
-    El campo de formulario `target_margin` solo se usa como valor por defecto cuando
-    la fila no trae margen propio.
+    Acepta filas con EAN real, o sin EAN si traen 'descripcion'/'nombre'
+    (caso Fruver a granel: usa homologación por nombre, ver services/bulk.py).
+
+    Campos de formulario opcionales:
+      - target_margin: margen objetivo por defecto (si la fila no trae uno propio).
+      - cities: ciudades o códigos de tienda separados por coma (ej.
+        "Bogotá,Medellín,Cali" o "1,5,18") para correr
+        CADA fila en cada una de esas ciudades. Se ignora si el Excel ya
+        trae una columna 'Ciudad' propia (esa manda).
     """
     if "file" not in request.files:
         return jsonify({"error": "Adjunte un archivo en el campo 'file'."}), 400
@@ -294,7 +335,11 @@ def api_bulk():
 
     try:
         target_margin = _float_or_none(request.form.get("target_margin"))
-        result = bulk.process_bulk_file(str(save_path), target_margin=target_margin)
+        cities_raw = (request.form.get("cities") or "").strip()
+        cities = [c.strip() for c in cities_raw.split(",") if c.strip()] or None
+        result = bulk.process_bulk_file(
+            str(save_path), target_margin=target_margin, cities=cities
+        )
         return jsonify(result)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Error en /api/bulk")
@@ -304,24 +349,6 @@ def api_bulk():
 # ──────────────────────────────────────────────────────────────────────────
 # HELPERS
 # ──────────────────────────────────────────────────────────────────────────
-def _name_key(name: str, weight_g: float | None = None) -> str:
-    """
-    Deriva una clave sintética estable a partir del nombre del producto.
-
-    Permite usar el flujo de consulta (basado en EAN) cuando solo se dispone del
-    nombre: el mismo nombre genera siempre la misma clave, de modo que el
-    histórico se acumula correctamente sin chocar con EAN reales. Cabe en
-    String(20) del modelo Product.
-
-    Si se indica peso, se incluye en la clave para separar consultas por cantidad.
-    """
-    key = name.strip().lower()
-    if weight_g and weight_g > 0:
-        key += f"|{int(round(weight_g))}g"
-    digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
-    return f"N-{digest}"
-
-
 def _int_or_none(value):
     try:
         return int(float(value)) if value not in (None, "") else None

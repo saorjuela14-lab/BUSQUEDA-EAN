@@ -54,9 +54,15 @@ def scrape_all(
     description: Optional[str] = None,
     retailer_keys: Optional[list[str]] = None,
     priority: Optional[int] = None,
+    city: Optional[str] = None,
+    category: Optional[str] = None,
 ) -> list[RetailerResult]:
     """
     Ejecuta el scraping real de todos los retailers en paralelo.
+
+    `city` regionaliza la consulta en retailers VTEX (ver scrapers/vtex.py).
+    `category` ajusta la homologación por descripción (umbral/normalización
+    especial para "fruver", ver services/matching.py).
 
     Devuelve una lista de RetailerResult (uno por retailer consultado).
     """
@@ -64,7 +70,7 @@ def scrape_all(
     results: list[RetailerResult] = []
 
     with ThreadPoolExecutor(max_workers=Config.SCRAPER_MAX_WORKERS) as pool:
-        futures = {pool.submit(sc.search, ean, description): sc for sc in scrapers}
+        futures = {pool.submit(sc.search, ean, description, city, category): sc for sc in scrapers}
         for fut in as_completed(futures):
             sc = futures[fut]
             try:
@@ -73,7 +79,7 @@ def scrape_all(
                 logger.warning("Scraper %s falló: %s", sc.key, exc)
                 results.append(
                     RetailerResult(
-                        retailer=sc.key, retailer_name=sc.name, found=False, error=str(exc)
+                        retailer=sc.key, retailer_name=sc.name, found=False, error=str(exc), city=city
                     )
                 )
 

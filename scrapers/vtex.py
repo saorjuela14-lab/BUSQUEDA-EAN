@@ -13,25 +13,52 @@ Si la red falla, el retailer se reporta como no encontrado con el error.
 """
 from __future__ import annotations
 
+import logging
 from typing import Optional
 from urllib.parse import quote
 
 import requests
 
-from config import Config
+from config import Config, city_postal_code
 from services.matching import MatchCandidate
 from services.rounding import round_cop
 
 from .base import BaseScraper, RetailerResult
 
+logger = logging.getLogger(__name__)
+
 
 class VtexScraper(BaseScraper):
     """Scraper genérico para tiendas VTEX."""
 
-    def _session(self) -> requests.Session:
+    def _session(self, postal_code: Optional[str] = None) -> requests.Session:
         s = requests.Session()
         s.headers.update({"User-Agent": Config.USER_AGENT, "Accept": "application/json"})
+        if postal_code:
+            self._apply_region(s, postal_code)
         return s
+
+    def _apply_region(self, session: requests.Session, postal_code: str) -> None:
+        """
+        Regionaliza la sesión VTEX para que la tienda devuelva precio/
+        disponibilidad de la ciudad/zona correspondiente al código postal.
+
+        Mecanismo oficial de VTEX (Session Manager API): un POST a
+        /api/sessions con `public.postalCode` + `public.countryCode` fija las
+        cookies vtex_session / vtex_segment en la sesión, que se reenvían
+        automáticamente en las siguientes peticiones al mismo dominio. Si el
+        retailer NO tiene activa la función "Region" (regionalización por
+        seller/precio), esto no produce error: simplemente no habrá diferencia
+        de precio entre ciudades para ese retailer.
+        """
+        try:
+            url = f"{self.base_url}/api/sessions"
+            params = {"public.postalCode": postal_code, "public.countryCode": "COL"}
+            session.post(url, params=params, timeout=Config.SCRAPER_TIMEOUT)
+        except requests.RequestException as exc:
+            logger.debug(
+                "No se pudo regionalizar sesión VTEX (%s) para CP %s: %s", self.key, postal_code, exc
+            )
 
     def _best_offer(self, product: dict) -> Optional[dict]:
         """
@@ -113,20 +140,27 @@ class VtexScraper(BaseScraper):
             promo_price_per_kg=promo_price_per_kg,
         )
 
-    def _fetch_by_ean(self, ean: str) -> Optional[RetailerResult]:
+    def _fetch_by_ean(self, ean: str, city: Optional[str] = None) -> Optional[RetailerResult]:
+        postal_code = city_postal_code(city)
         url = f"{self.base_url}/api/catalog_system/pub/products/search"
         params = {"fq": f"alternateIds_Ean:{ean}"}
-        resp = self._session().get(url, params=params, timeout=Config.SCRAPER_TIMEOUT)
+        resp = self._session(postal_code).get(url, params=params, timeout=Config.SCRAPER_TIMEOUT)
         resp.raise_for_status()
         data = resp.json()
         if not data:
-            return RetailerResult(retailer=self.key, retailer_name=self.name, found=False)
-        return self._parse_product(data[0])
+            return RetailerResult(retailer=self.key, retailer_name=self.name, found=False, city=city)
+        result = self._parse_product(data[0])
+        if result:
+            result.city = city
+        return result
 
-    def _fetch_candidates(self, description: str) -> list[tuple[MatchCandidate, RetailerResult]]:
+    def _fetch_candidates(
+        self, description: str, city: Optional[str] = None
+    ) -> list[tuple[MatchCandidate, RetailerResult]]:
+        postal_code = city_postal_code(city)
         url = f"{self.base_url}/api/catalog_system/pub/products/search"
         params = {"ft": quote(description), "_from": 0, "_to": 19}
-        resp = self._session().get(url, params=params, timeout=Config.SCRAPER_TIMEOUT)
+        resp = self._session(postal_code).get(url, params=params, timeout=Config.SCRAPER_TIMEOUT)
         resp.raise_for_status()
         data = resp.json() or []
         out: list[tuple[MatchCandidate, RetailerResult]] = []
@@ -134,6 +168,7 @@ class VtexScraper(BaseScraper):
             result = self._parse_product(product)
             if result and result.product_name:
                 result.found = False  # se marcará found tras homologar
+                result.city = city
                 out.append(
                     (MatchCandidate(name=result.product_name, payload={}), result)
                 )

@@ -67,6 +67,9 @@ class PriceQuery(Base):
     cost: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Estrategia de homologación usada: "ean" | "description".
     match_mode: Mapped[str] = mapped_column(String(20), default="ean")
+    # Ciudad o código de tienda de la consulta (ver config.STORES /
+    # config.resolve_location). None = nacional/sin regionalizar.
+    city: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
     # KPIs consolidados (snapshot del momento de la consulta).
@@ -92,6 +95,7 @@ class PriceQuery(Base):
             "ean": self.ean,
             "cost": self.cost,
             "match_mode": self.match_mode,
+            "city": self.city,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "min_price": self.min_price,
             "max_price": self.max_price,
@@ -119,6 +123,7 @@ class PriceResult(Base):
     url: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Score de homologación cuando se buscó por descripción (0-100).
     match_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    city: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     query: Mapped["PriceQuery"] = relationship(back_populates="results")
@@ -140,6 +145,7 @@ class PriceResult(Base):
             "product_name": self.product_name,
             "url": self.url,
             "match_score": self.match_score,
+            "city": self.city,
         }
 
 

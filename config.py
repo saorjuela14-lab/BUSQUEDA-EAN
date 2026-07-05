@@ -60,6 +60,10 @@ class Config:
     # Negocio
     # Homologación por descripción: umbral mínimo de similitud (0-100).
     MATCH_THRESHOLD: int = int(os.getenv("MATCH_THRESHOLD", "80"))
+    # Umbral reducido para Fruver: nombres cortos y genéricos ("AGUACATE KG")
+    # vs. nombres comerciales con variedad/marca ("Aguacate Hass x Kg") bajan
+    # el score de similitud aunque sea el mismo producto. Ver services/matching.py.
+    MATCH_THRESHOLD_FRUVER: int = int(os.getenv("MATCH_THRESHOLD_FRUVER", "68"))
     # Múltiplo de redondeo comercial colombiano para precios sugeridos.
     ROUNDING_MULTIPLE: int = int(os.getenv("ROUNDING_MULTIPLE", "50"))
     # Variación de precio que dispara alerta (fracción, 0.10 = 10%).
@@ -79,6 +83,7 @@ CATEGORIES: dict[str, dict[str, str]] = {
     "cold_meat": {"label": "Cold Meat", "emoji": "🥓", "color": "#f05252"},
     "frozen": {"label": "Frozen", "emoji": "🧊", "color": "#38bdf8"},
     "seafood": {"label": "Seafood", "emoji": "🦐", "color": "#22c88a"},
+    "fruver": {"label": "Fruver", "emoji": "🥬", "color": "#5cb85c"},
 }
 
 # Subcategorías de referencia (homologación / clasificación).
@@ -92,7 +97,158 @@ SUBCATEGORIES: dict[str, list[str]] = {
     "cold_meat": ["Jamones", "Mortadelas", "Salchichas", "Chorizos", "Tocineta"],
     "frozen": ["Pollo congelado", "Vegetales congelados", "Papas congeladas", "Helados", "Comidas preparadas"],
     "seafood": ["Camarones", "Pescados", "Atún", "Salmón", "Mariscos congelados"],
+    "fruver": [
+        "Verduras - Granel", "Verduras - Empaque", "Frutas - Granel", "Frutas - Empaque",
+        "Tubérculos", "Hierbas y Aromáticas", "Frutas Exóticas", "Ensaladas y Mezclas",
+    ],
 }
+
+# ──────────────────────────────────────────────────────────────────────────
+# TIENDAS MAKRO (ubicación, NSE, tamaño)
+# Clave = código de tienda, TAL COMO aparece en tus reportes reales (columna
+# "# Tienda" en las hojas Profimetrics, Análisis, CAMBIO, Ciudades-Region).
+#
+# La tienda 21 (Puente Aranda) YA NO EXISTE: se deja en el maestro con
+# active=False para no perder trazabilidad histórica, pero `active_stores()`
+# la excluye y `resolve_location()` la rechaza para consultas nuevas.
+# ──────────────────────────────────────────────────────────────────────────
+STORES: dict[int, dict] = {
+    1:  {"name": "Villa del Río",     "city": "Bogotá",       "department": "Cundinamarca",      "nse": "Multiestrato", "size": "Grande",  "region_group": "CENTRO",           "active": True},
+    2:  {"name": "Cumará",            "city": "Bogotá",       "department": "Cundinamarca",      "nse": "Multiestrato", "size": "Grande",  "region_group": "CENTRO",           "active": True},
+    3:  {"name": "Valle de Lili",     "city": "Cali",         "department": "Valle del Cauca",   "nse": "Bajo",         "size": "Mediano", "region_group": "OCCIDENTE",        "active": True},
+    4:  {"name": "Villa Santos",      "city": "Barranquilla", "department": "Atlántico",         "nse": "Alto",         "size": "Grande",  "region_group": "COSTA",            "active": True},
+    5:  {"name": "San Juan",          "city": "Medellín",     "department": "Antioquia",         "nse": "Alto",         "size": "Grande",  "region_group": "ANTIOQUIA",        "active": True},
+    7:  {"name": "Dosquebradas",      "city": "Dosquebradas", "department": "Risaralda",         "nse": "Medio",        "size": "Mediano", "region_group": "OCCIDENTE",        "active": True},
+    8:  {"name": "Av. Boyacá",        "city": "Bogotá",       "department": "Cundinamarca",      "nse": "Multiestrato", "size": "Grande",  "region_group": "CENTRO",           "active": True},
+    9:  {"name": "Ibagué",            "city": "Ibagué",       "department": "Tolima",            "nse": "Bajo",         "size": "Grande",  "region_group": "CENTRO",           "active": True},
+    10: {"name": "Cartagena",         "city": "Cartagena",    "department": "Bolívar",           "nse": "Alto",         "size": "Grande",  "region_group": "COSTA",            "active": True},
+    11: {"name": "Calle 30",          "city": "Barranquilla", "department": "Atlántico",         "nse": "Alto",         "size": "Mediano", "region_group": "COSTA",            "active": True},
+    12: {"name": "Villavicencio",     "city": "Villavicencio","department": "Meta",              "nse": "Medio",        "size": "Mediano", "region_group": "CENTRO",           "active": True},
+    13: {"name": "Cali Norte",        "city": "Cali",         "department": "Valle del Cauca",   "nse": "Bajo",         "size": "Grande",  "region_group": "OCCIDENTE",        "active": True},
+    14: {"name": "Santa Marta",       "city": "Santa Marta",  "department": "Magdalena",         "nse": "Multiestrato", "size": "Pequeño", "region_group": "COSTA",            "active": True},
+    15: {"name": "Cúcuta",            "city": "Cúcuta",       "department": "Norte de Santander","nse": "Medio",        "size": "Mediano", "region_group": "SANTANDER/COSTA",  "active": True},
+    16: {"name": "Montería",          "city": "Montería",     "department": "Córdoba",           "nse": "Multiestrato", "size": "Pequeño", "region_group": "COSTA",            "active": True},
+    17: {"name": "Tunja",             "city": "Tunja",        "department": "Boyacá",            "nse": "Alto",         "size": "Mediano", "region_group": "CENTRO",           "active": True},
+    18: {"name": "Estación Poblado",  "city": "Medellín",     "department": "Antioquia",         "nse": "Alto",         "size": "Pequeño", "region_group": "ANTIOQUIA",        "active": True},
+    19: {"name": "Floridablanca",     "city": "Floridablanca","department": "Santander",         "nse": "Medio",        "size": "Mediano", "region_group": "SANTANDER/COSTA",  "active": True},
+    20: {"name": "Cajicá",            "city": "Cajicá",       "department": "Cundinamarca",      "nse": "Multiestrato", "size": "Pequeño", "region_group": "CENTRO",           "active": True},
+    21: {"name": "Puente Aranda",     "city": "Bogotá",       "department": "Cundinamarca",      "nse": "Multiestrato", "size": "Pequeño", "region_group": "CENTRO",           "active": False},  # YA NO EXISTE
+    22: {"name": "Valledupar",        "city": "Valledupar",   "department": "Cesar",             "nse": "Multiestrato", "size": "Mediano", "region_group": "COSTA",            "active": True},
+    23: {"name": "Alto Prado",        "city": "Barranquilla", "department": "Atlántico",         "nse": "Alto",         "size": "Urbano",  "region_group": "COSTA",            "active": True},
+}
+
+# Código postal representativo por ciudad (para regionalizar precios VTEX vía
+# Session Manager API — ver `_apply_region` en scrapers/vtex.py). Claves en
+# minúsculas y sin tildes (ver `_fold`); no depende de cómo se escriba la
+# ciudad al llamarlo.
+CITY_POSTAL_CODES: dict[str, str] = {
+    "bogota": "110111",
+    "medellin": "050001",
+    "cali": "760001",
+    "barranquilla": "080001",
+    "cartagena": "130001",
+    "tunja": "150001",
+    "valledupar": "200001",
+    "monteria": "230001",
+    "cajica": "250001",
+    "villavicencio": "500001",
+    "santa marta": "470001",
+    "cucuta": "540001",
+    "dosquebradas": "660004",
+    "floridablanca": "680002",
+    "ibague": "730001",
+}
+
+
+def _fold(text: str) -> str:
+    """Minúsculas y sin tildes, para comparar nombres de ciudad sin depender de acentos."""
+    import unicodedata
+
+    normalized = unicodedata.normalize("NFKD", str(text))
+    return "".join(c for c in normalized if not unicodedata.combining(c)).strip().lower()
+
+
+def active_stores() -> dict[int, dict]:
+    """Tiendas Makro vigentes (excluye la 21 - Puente Aranda, ya cerrada)."""
+    return {code: meta for code, meta in STORES.items() if meta.get("active", True)}
+
+
+def store_info(store_code) -> dict | None:
+    """Metadatos de una tienda por su código (acepta int o str numérico)."""
+    try:
+        code = int(store_code)
+    except (TypeError, ValueError):
+        return None
+    return STORES.get(code)
+
+
+def resolve_location(key) -> dict | None:
+    """
+    Resuelve una clave de ubicación a metadatos de ciudad/tienda.
+
+    Acepta: código de tienda (ej. 18 o "18") o nombre de ciudad (ej.
+    "Bogotá", "bogota", "BOGOTA" — insensible a tildes/mayúsculas). Devuelve
+    None si no reconoce la clave, o si corresponde a la tienda 21
+    (Puente Aranda, cerrada) — así ninguna consulta nueva se regionaliza
+    accidentalmente contra una tienda que ya no existe.
+    """
+    if key is None or key == "":
+        return None
+
+    store = store_info(key)
+    if store is not None:
+        if not store.get("active", True):
+            return None
+        city = store["city"]
+        return {
+            "store_code": int(key),
+            "store_name": store["name"],
+            "city": city,
+            "postal_code": CITY_POSTAL_CODES.get(_fold(city)),
+            "nse": store.get("nse"),
+            "size": store.get("size"),
+            "region_group": store.get("region_group"),
+        }
+
+    # No es un código de tienda válido: intentar como nombre de ciudad.
+    postal = CITY_POSTAL_CODES.get(_fold(key))
+    if postal:
+        return {
+            "store_code": None,
+            "store_name": None,
+            "city": str(key),
+            "postal_code": postal,
+            "nse": None,
+            "size": None,
+            "region_group": None,
+        }
+    return None
+
+
+def city_postal_code(location_key) -> str | None:
+    """
+    Código postal representativo para regionalizar precios VTEX.
+
+    Acepta código de tienda o nombre de ciudad (ver `resolve_location`).
+    """
+    loc = resolve_location(location_key)
+    return loc.get("postal_code") if loc else None
+
+
+def canonical_location_key(location_key) -> str | None:
+    """
+    Normaliza una clave de ubicación (código de tienda o nombre de ciudad,
+    en cualquier formato/mayúsculas/tildes) a un identificador de texto
+    estable, para que el histórico en base de datos compare siempre
+    "Bogotá" == "BOGOTA" == "bogota", y 18 == "18". Devuelve None si la
+    ubicación no se reconoce o corresponde a una tienda cerrada.
+    """
+    loc = resolve_location(location_key)
+    if loc is None:
+        return None
+    if loc.get("store_code") is not None:
+        return str(loc["store_code"])
+    return _fold(loc["city"])
 
 # ──────────────────────────────────────────────────────────────────────────
 # RETAILERS

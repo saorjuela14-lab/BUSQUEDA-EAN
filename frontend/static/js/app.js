@@ -11,14 +11,39 @@ const API = {
   catalogStats: () => fetch('/api/catalog/stats').then(r => r.json()),
 };
 
-let CONFIG = { categories: {}, retailers: {} };
+let CONFIG = { categories: {}, retailers: {}, stores: {} };
 let PRODUCTS = [];
 let categoryChart = null;
+let LAST_REPORT = null;
 
 // ── Utilidades ──────────────────────────────────────────────
 const fmtCOP = (n) => (n == null || isNaN(n)) ? '—' : '$' + Math.round(n).toLocaleString('es-CO');
 const fmtPct = (n) => (n == null || isNaN(n)) ? '—' : n.toFixed(1) + '%';
 const marginColor = (p) => p == null ? '' : (p >= 20 ? 'text-green' : p >= 10 ? 'text-amber' : 'text-red');
+
+function buildLocationOptions(stores) {
+  let html = '<option value="">Nacional (sin regionalizar)</option>';
+  const cities = new Set();
+  Object.entries(stores || {}).forEach(([code, s]) => {
+    html += `<option value="${code}">#${code} ${s.name} · ${s.city}</option>`;
+    cities.add(s.city);
+  });
+  [...cities].sort((a, b) => a.localeCompare(b, 'es')).forEach(city => {
+    html += `<option value="${city}">${city} (ciudad)</option>`;
+  });
+  return html;
+}
+
+function locationLabel(key) {
+  if (!key) return 'Nacional';
+  const store = CONFIG.stores[key];
+  if (store) return `#${key} ${store.name}`;
+  return key;
+}
+
+function parseCitiesList(raw) {
+  return (raw || '').split(',').map(s => s.trim()).filter(Boolean);
+}
 
 // ── Navegación ──────────────────────────────────────────────
 function switchView(view) {
@@ -42,6 +67,11 @@ async function init() {
   const sel = document.getElementById('categorySelect');
   sel.innerHTML = catOptions;
   document.getElementById('nameCategorySelect').innerHTML = catOptions;
+  document.getElementById('nameCategorySelect').value = 'fruver';
+
+  const locOpts = buildLocationOptions(CONFIG.stores);
+  document.getElementById('locationSelect').innerHTML = locOpts;
+  document.getElementById('nameLocationSelect').innerHTML = locOpts;
 
   PRODUCTS = await API.products();
   renderHints();
@@ -91,18 +121,21 @@ async function doSearch() {
   if (!ean) { out.innerHTML = '<div class="alert alert-warning">Ingresa un EAN.</div>'; return; }
 
   const margin = parseFloat(document.getElementById('marginInput').value);
+  const city = document.getElementById('locationSelect').value || null;
   const body = {
     ean,
     cost: parseInt(document.getElementById('costInput').value) || null,
     description: document.getElementById('descInput').value.trim() || null,
     category: document.getElementById('categorySelect').value,
     target_margin: isNaN(margin) ? null : margin / 100,
+    city,
   };
 
   out.innerHTML = '<div class="loading"><div class="spinner-border text-primary"></div><div class="mt-2">Consultando retailers...</div></div>';
   try {
     const report = await API.search(body);
     if (report.error) { out.innerHTML = `<div class="alert alert-danger">${report.error}</div>`; return; }
+    LAST_REPORT = report;
     renderReport(report);
   } catch (e) {
     out.innerHTML = `<div class="alert alert-danger">Error: ${e.message}</div>`;
@@ -128,6 +161,7 @@ async function doSearchName() {
 
   const margin = parseFloat(document.getElementById('nameMarginInput').value);
   const { weight, weight_unit } = readNameWeight();
+  const multiCities = parseCitiesList(document.getElementById('nameMultiCityInput').value);
   const body = {
     name,
     cost: parseInt(document.getElementById('nameCostInput').value) || null,
@@ -136,13 +170,21 @@ async function doSearchName() {
     weight,
     weight_unit,
   };
+  if (multiCities.length) {
+    body.cities = multiCities;
+  } else {
+    const city = document.getElementById('nameLocationSelect').value || null;
+    if (city) body.city = city;
+  }
 
   const weightHint = weight ? ` · ${weight} ${weight_unit}` : '';
   out.innerHTML = '<div class="loading"><div class="spinner-border text-primary"></div><div class="mt-2">Buscando "' + name + '"' + weightHint + ' en los ecommerce...</div></div>';
   try {
     const report = await API.searchName(body);
     if (report.error) { out.innerHTML = `<div class="alert alert-danger">${report.error}</div>`; return; }
-    renderReport(report);
+    LAST_REPORT = report;
+    if (report.search_mode === 'name_multi_city') renderMultiCityReport(report);
+    else renderReport(report);
   } catch (e) {
     out.innerHTML = `<div class="alert alert-danger">Error: ${e.message}</div>`;
   }
@@ -150,6 +192,54 @@ async function doSearchName() {
 
 function homePositionClass(level) {
   return ({ success: 'alert-success', warning: 'alert-warning', danger: 'alert-danger', info: 'alert-info' }[level] || 'alert-info');
+}
+
+function renderMultiCityReport(report) {
+  const rows = report.cities || [];
+  const skipped = report.skipped || [];
+  let html = `<div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
+    <div>
+      <span class="badge bg-danger">Comparación multi-ciudad</span>
+      <span class="fw-bold ms-2">${report.product_name || report.search_name || ''}</span>
+    </div>
+  </div>`;
+  if (skipped.length) {
+    html += `<div class="alert alert-warning">${skipped.map(s => `Omitida: ${s.city} — ${s.reason}`).join('<br>')}</div>`;
+  }
+  if (!rows.length) {
+    html += '<div class="alert alert-warning">No se obtuvieron resultados por ciudad.</div>';
+    document.getElementById('searchResult').innerHTML = html;
+    return;
+  }
+  html += `<div class="card"><div class="card-body table-responsive">
+    <table class="table table-sm align-middle"><thead><tr>
+      <th>Ciudad / tienda</th><th>PVP Makro</th><th>Mín</th><th>Prom</th><th>Máx</th><th>Líder</th><th>Posición Makro</th><th></th>
+    </tr></thead><tbody>
+    ${rows.map(r => {
+      const pos = r.home_position || '—';
+      const posLabel = pos === 'leader' ? '✅ Más barato' : pos === 'most_expensive' ? '🔴 Más caro'
+        : pos === 'above_avg' ? '⚠️ Sobre prom.' : pos === 'competitive' ? '🟡 Competitivo' : '—';
+      const label = r.store_name ? `#${r.store_code} ${r.store_name}` : (r.city_label || r.city);
+      return `<tr>
+        <td>${label}</td><td>${fmtCOP(r.makro_pvp)}</td>
+        <td>${fmtCOP(r.min_price)}</td><td>${fmtCOP(r.avg_price)}</td><td>${fmtCOP(r.max_price)}</td>
+        <td>${r.leader_retailer || '—'}</td><td>${posLabel}</td>
+        <td><button class="btn btn-sm btn-outline-primary" onclick='showCityDetail(${JSON.stringify(r.city)})'>Detalle</button></td>
+      </tr>`;
+    }).join('')}
+    </tbody></table></div></div>`;
+  document.getElementById('searchResult').innerHTML = html;
+}
+
+function showCityDetail(cityKey) {
+  const report = (LAST_REPORT && LAST_REPORT.reports_by_city) ? LAST_REPORT.reports_by_city[cityKey] : null;
+  if (!report) return;
+  renderReport({ ...report, search_mode: 'name', search_name: LAST_REPORT.search_name || report.product_name });
+  const box = document.getElementById('searchResult');
+  box.insertAdjacentHTML('afterbegin', `<div class="alert alert-info mb-3">
+    <button class="btn btn-sm btn-outline-secondary float-end" onclick='renderMultiCityReport(LAST_REPORT)'>← Volver a comparación</button>
+    Detalle para <strong>${locationLabel(cityKey)}</strong>
+  </div>`);
 }
 
 function renderReport(report) {
@@ -175,6 +265,9 @@ function renderReport(report) {
     : (report.match_mode === 'description' ? '<span class="badge bg-warning text-dark ms-2">Homologado por descripción</span>' : '');
   const weightBadge = report.weight_label
     ? `<span class="badge bg-info text-dark ms-2">Peso: ${report.weight_label}</span>`
+    : '';
+  const cityBadge = report.city
+    ? `<span class="badge bg-secondary ms-2">${locationLabel(report.city)}</span>`
     : '';
   const weightNote = report.target_weight_g
     ? `<span class="text-muted fw-normal small"> · precios normalizados a ${report.weight_label || report.target_weight_g + ' g'}</span>`
@@ -209,8 +302,9 @@ function renderReport(report) {
         ${eanLabel}
         ${modeBadge}
         ${weightBadge}
+        ${cityBadge}
       </div>
-      <button class="btn btn-outline-success btn-sm" onclick='exportExcel(${JSON.stringify(report.ean)}, ${report.cost}, ${JSON.stringify(report.category)}, ${JSON.stringify(exportDesc)})'>
+      <button class="btn btn-outline-success btn-sm" onclick='exportExcel(${JSON.stringify(report.ean)}, ${report.cost}, ${JSON.stringify(report.category)}, ${JSON.stringify(exportDesc)}, ${JSON.stringify(report.city || null)})'>
         <i class="bi bi-file-earmark-excel"></i> Exportar Excel
       </button>
     </div>
@@ -278,9 +372,14 @@ function renderReport(report) {
   document.getElementById('searchResult').innerHTML = html;
 }
 
-async function exportExcel(ean, cost, category, description) {
+async function exportExcel(ean, cost, category, description, city) {
   const margin = parseFloat(document.getElementById('marginInput').value);
-  const body = { ean, cost, category, description: description || null, target_margin: isNaN(margin) ? null : margin / 100 };
+  const body = {
+    ean, cost, category,
+    description: description || null,
+    target_margin: isNaN(margin) ? null : margin / 100,
+    city: city || document.getElementById('locationSelect').value || null,
+  };
   const resp = await fetch('/api/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!resp.ok) { alert('Error al exportar'); return; }
   const blob = await resp.blob();
@@ -322,13 +421,14 @@ async function loadHistory() {
   tbody.innerHTML = rows.length ? rows.map(h => `<tr>
     <td>${(h.created_at || '').replace('T', ' ').slice(0, 16)}</td>
     <td>${h.product_name || '—'}</td><td>${h.ean}</td>
+    <td>${locationLabel(h.city)}</td>
     <td>${fmtCOP(h.min_price)}</td><td>${fmtCOP(h.avg_price)}</td><td>${fmtCOP(h.max_price)}</td>
     <td class="${marginColor(h.avg_margin_pct)}">${fmtPct(h.avg_margin_pct)}</td>
-    <td><button class="btn btn-sm btn-outline-primary" onclick='reload(${JSON.stringify(h.ean)}, ${h.cost || 0}, ${JSON.stringify(h.category || '')}, ${JSON.stringify(h.product_name || '')})'>Ver</button></td>
-  </tr>`).join('') : '<tr><td colspan="8" class="text-muted text-center">Sin histórico.</td></tr>';
+    <td><button class="btn btn-sm btn-outline-primary" onclick='reload(${JSON.stringify(h.ean)}, ${h.cost || 0}, ${JSON.stringify(h.category || '')}, ${JSON.stringify(h.product_name || '')}, ${JSON.stringify(h.city || '')})'>Ver</button></td>
+  </tr>`).join('') : '<tr><td colspan="9" class="text-muted text-center">Sin histórico.</td></tr>';
 }
 
-function reload(ean, cost, category, productName) {
+function reload(ean, cost, category, productName, city) {
   switchView('search');
   // Los EAN sintéticos (N-...) corresponden a búsquedas por nombre.
   if (typeof ean === 'string' && ean.startsWith('N-')) {
@@ -336,12 +436,14 @@ function reload(ean, cost, category, productName) {
     document.getElementById('nameInput').value = productName || '';
     if (cost) document.getElementById('nameCostInput').value = cost;
     if (category) document.getElementById('nameCategorySelect').value = category;
+    if (city) document.getElementById('nameLocationSelect').value = city;
     doSearchName();
     return;
   }
   switchSearch('ean');
   fillEan(ean, cost);
   if (category) document.getElementById('categorySelect').value = category;
+  if (city) document.getElementById('locationSelect').value = city;
   doSearch();
 }
 
@@ -390,6 +492,8 @@ async function doBulk() {
   fd.append('file', fileInput.files[0]);
   const margin = parseFloat(document.getElementById('bulkMargin').value);
   if (!isNaN(margin)) fd.append('target_margin', margin / 100);
+  const bulkCities = document.getElementById('bulkCities').value.trim();
+  if (bulkCities) fd.append('cities', bulkCities);
 
   out.innerHTML = '<div class="loading"><div class="spinner-border text-primary"></div><div class="mt-2">Procesando...</div></div>';
   const res = await fetch('/api/bulk', { method: 'POST', body: fd }).then(r => r.json());
@@ -402,7 +506,7 @@ async function doBulk() {
   if (res.errors && res.errors.length) html += `<div class="alert alert-warning">${res.errors.join('<br>')}</div>`;
   if (res.reports && res.reports.length) {
     html += `<div class="table-responsive"><table class="table table-sm"><thead><tr>
-      <th>EAN</th><th>Producto</th><th>PVP Makro</th><th>Posición</th>
+      <th>EAN / clave</th><th>Producto</th><th>Ciudad</th><th>PVP Makro</th><th>Posición</th>
       <th>Margen obj.</th><th>Margen actual</th><th>Validación</th><th>Precio obj.</th>
       <th>Mín</th><th>Prom</th></tr></thead><tbody>
       ${res.reports.map(r => {
@@ -415,7 +519,8 @@ async function doBulk() {
           : v.status === 'below' ? '⚠️ Bajo obj.'
           : v.status === 'no_data' ? '—' : '—';
         const valClass = v.status === 'below' ? 'text-red fw-bold' : v.status === 'met' ? 'text-green' : '';
-        return `<tr><td>${r.ean}</td><td>${r.product_name||'—'}</td>
+        return `<tr><td>${r.ean || r.query_key || '—'}</td><td>${r.product_name||'—'}</td>
+        <td>${locationLabel(r.city)}</td>
         <td>${fmtCOP(r.makro_pvp)}</td><td>${posLabel}</td>
         <td>${fmtPct(r.target_margin_pct)}</td>
         <td class="${marginColor(v.actual_margin_pct)}">${fmtPct(v.actual_margin_pct)}</td>

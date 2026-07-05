@@ -92,18 +92,26 @@ class AlgoliaScraper(BaseScraper):
             match_mode="ean",
         )
 
-    def _fetch_by_ean(self, ean: str) -> Optional[RetailerResult]:
+    def _fetch_by_ean(self, ean: str, city: Optional[str] = None) -> Optional[RetailerResult]:
+        # Nota: el índice público de Algolia de Alkosto no expone precio por
+        # ciudad/regionId; `city` se acepta por consistencia de interfaz pero
+        # no tiene efecto aquí (limitación conocida, ver documentación).
         hits = self._query(ean, hits_per_page=5)
         if not hits:
-            return RetailerResult(retailer=self.key, retailer_name=self.name, found=False)
+            return RetailerResult(retailer=self.key, retailer_name=self.name, found=False, city=city)
         # Preferir el hit cuyo código coincide exactamente con el EAN.
         exact = next((h for h in hits if str(h.get(self.field_code)) == str(ean)), None)
         hit = exact or hits[0]
         if exact is None:
-            return RetailerResult(retailer=self.key, retailer_name=self.name, found=False)
-        return self._hit_to_result(hit)
+            return RetailerResult(retailer=self.key, retailer_name=self.name, found=False, city=city)
+        result = self._hit_to_result(hit)
+        if result:
+            result.city = city
+        return result
 
-    def _fetch_candidates(self, description: str) -> list[tuple[MatchCandidate, RetailerResult]]:
+    def _fetch_candidates(
+        self, description: str, city: Optional[str] = None
+    ) -> list[tuple[MatchCandidate, RetailerResult]]:
         out: list[tuple[MatchCandidate, RetailerResult]] = []
         for hit in self._query(description, hits_per_page=15):
             result = self._hit_to_result(hit, found=False)

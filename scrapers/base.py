@@ -38,6 +38,8 @@ class RetailerResult:
     price_per_kg: Optional[int] = None
     promo_price_per_kg: Optional[int] = None
     error: Optional[str] = None
+    # Ciudad usada para regionalizar la consulta (None = nacional/por defecto).
+    city: Optional[str] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -57,35 +59,53 @@ class BaseScraper:
         self.base_url = base_url
 
     # ── API pública ────────────────────────────────────────────────────
-    def search(self, ean: str, description: Optional[str] = None) -> RetailerResult:
+    def search(
+        self,
+        ean: str,
+        description: Optional[str] = None,
+        city: Optional[str] = None,
+        category: Optional[str] = None,
+    ) -> RetailerResult:
         """
         Busca un producto: primero por EAN, luego por descripción (fallback).
+
+        `city` regionaliza la consulta cuando el motor lo soporta (VTEX).
+        `category` ajusta el umbral/normalización de homologación (ver
+        services/matching.py) — relevante sobre todo para "fruver".
         """
         try:
-            result = self._fetch_by_ean(ean)
+            result = self._fetch_by_ean(ean, city=city)
             if result and result.found:
+                result.city = result.city or city
                 return result
 
             if description:
-                homologated = self._search_by_description(description)
+                homologated = self._search_by_description(description, city=city, category=category)
                 if homologated and homologated.found:
+                    homologated.city = homologated.city or city
                     return homologated
 
-            return RetailerResult(retailer=self.key, retailer_name=self.name, found=False)
+            return RetailerResult(retailer=self.key, retailer_name=self.name, found=False, city=city)
         except Exception as exc:  # nunca tumbar la comparación por un retailer
             return RetailerResult(
                 retailer=self.key,
                 retailer_name=self.name,
                 found=False,
                 error=str(exc),
+                city=city,
             )
 
-    def _search_by_description(self, description: str) -> Optional[RetailerResult]:
+    def _search_by_description(
+        self,
+        description: str,
+        city: Optional[str] = None,
+        category: Optional[str] = None,
+    ) -> Optional[RetailerResult]:
         """Homologación por descripción usando rapidfuzz sobre candidatos."""
-        candidates = self._fetch_candidates(description)
+        candidates = self._fetch_candidates(description, city=city)
         if not candidates:
             return None
-        match = best_match(description, [c for c, _ in candidates])
+        match = best_match(description, [c for c, _ in candidates], category=category)
         if not match:
             return None
         # Recuperar el RetailerResult asociado al candidato ganador.
@@ -98,10 +118,12 @@ class BaseScraper:
         return None
 
     # ── A implementar por subclases ────────────────────────────────────
-    def _fetch_by_ean(self, ean: str) -> Optional[RetailerResult]:
+    def _fetch_by_ean(self, ean: str, city: Optional[str] = None) -> Optional[RetailerResult]:
         raise NotImplementedError
 
-    def _fetch_candidates(self, description: str) -> list[tuple[MatchCandidate, RetailerResult]]:
+    def _fetch_candidates(
+        self, description: str, city: Optional[str] = None
+    ) -> list[tuple[MatchCandidate, RetailerResult]]:
         """
         Devuelve candidatos (para homologar) como pares (MatchCandidate, RetailerResult).
         Por defecto, sin candidatos.
