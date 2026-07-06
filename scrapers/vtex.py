@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import logging
 from typing import Optional
-from urllib.parse import quote
 
 import requests
 
@@ -159,7 +158,7 @@ class VtexScraper(BaseScraper):
     ) -> list[tuple[MatchCandidate, RetailerResult]]:
         postal_code = city_postal_code(city)
         url = f"{self.base_url}/api/catalog_system/pub/products/search"
-        params = {"ft": quote(description), "_from": 0, "_to": 19}
+        params = {"ft": description, "_from": 0, "_to": 49}
         resp = self._session(postal_code).get(url, params=params, timeout=Config.SCRAPER_TIMEOUT)
         resp.raise_for_status()
         data = resp.json() or []

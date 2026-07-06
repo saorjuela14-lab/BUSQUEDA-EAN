@@ -1,8 +1,8 @@
 """
 Inyección del precio Makro (PVP) desde el catálogo importado.
 
-Makro no se scrapea (requiere login). El PVP se carga vía Excel/CSV y se
-integra en cada comparación para evaluar la posición frente al mercado.
+La tienda online de Makro se scrapea por separado. El PVP del catálogo importado
+se integra como fuente complementaria cuando existe un EAN en catálogo local.
 """
 from __future__ import annotations
 
@@ -39,18 +39,32 @@ def apply_makro_catalog(
     category: Optional[str] = None,
 ) -> tuple[list[dict], Optional[dict], Optional[int]]:
     """
-    Inyecta Makro en los resultados si el EAN está en catálogo.
+    Integra Makro en los resultados.
+
+    - Si Makro ya fue encontrado por scraping, conserva ese resultado y añade
+      `catalog_pvp` cuando el EAN está en catálogo importado.
+    - Si no hay scraping pero sí catálogo, inyecta el PVP del catálogo.
 
     Devuelve (resultados_actualizados, producto_catálogo, pvp_makro).
     """
     catalog = repository.get_product_by_ean(ean)
-    makro = build_makro_result(catalog)
-    if makro is None:
+    makro_catalog = build_makro_result(catalog)
+    pvp = catalog["pvp"] if catalog else None
+
+    existing = next((r for r in results if r.get("retailer") == HOME_RETAILER), None)
+    if existing and existing.get("found"):
+        if makro_catalog:
+            existing["catalog_pvp"] = makro_catalog["price"]
+            existing["catalog_product_name"] = makro_catalog.get("product_name")
+            if existing.get("match_mode") != "catalog":
+                existing["source"] = existing.get("source") or "scrape"
+        return results, catalog, pvp or existing.get("catalog_pvp")
+
+    if makro_catalog is None:
         return results, catalog, None
 
-    # Evitar duplicados si Makro ya viniera en los resultados.
     cleaned = [r for r in results if r.get("retailer") != HOME_RETAILER]
-    return cleaned + [makro], catalog, catalog["pvp"] if catalog else None
+    return cleaned + [makro_catalog], catalog, pvp
 
 
 def competitor_results(results: list[dict]) -> list[dict]:

@@ -1,14 +1,17 @@
 """
 Definiciones concretas de scrapers por retailer.
 
-Cada retailer hereda del motor adecuado (VTEX o Playwright) y ajusta, cuando es
-necesario, las rutas de búsqueda o selectores propios del sitio. Mantener cada
-retailer aislado facilita el mantenimiento ante cambios de cada e-commerce.
+Cada retailer hereda del motor adecuado (VTEX, Algolia, Bloomreach, Playwright)
+y ajusta, cuando es necesario, las rutas de búsqueda o selectores propios del
+sitio. Mantener cada retailer aislado facilita el mantenimiento ante cambios de
+cada e-commerce.
 """
 from __future__ import annotations
 
 from .algolia import AlgoliaScraper
+from .makro_tienda import MakroTiendaScraper
 from .playwright_base import PlaywrightScraper
+from .pricesmart import PriceSmartScraper
 from .vtex import VtexScraper
 
 
@@ -29,10 +32,6 @@ class MetroScraper(VtexScraper):
     """Tiendas Metro - Cencosud (VTEX)."""
 
 
-class MakroScraper(VtexScraper):
-    """Makro Colombia (VTEX) — retailer de referencia."""
-
-
 class OlimpicaScraper(VtexScraper):
     """Supertiendas Olímpica (VTEX)."""
 
@@ -46,22 +45,16 @@ class AlkostoScraper(AlgoliaScraper):
     index_name = "alkostoIndexAlgoliaPRD"
 
 
+# ── Makro tienda online (Instaleap / Playwright) ───────────────────────────
+class MakroScraper(MakroTiendaScraper):
+    """Makro Colombia — tienda online tienda.makro.com.co."""
+
+
+# ── PriceSmart (Bloomreach API) ────────────────────────────────────────────
+# PriceSmartScraper definido en scrapers/pricesmart.py
+
+
 # ── Retailers con render dinámico (Playwright) ─────────────────────────────
-
-
-class PriceSmartScraper(PlaywrightScraper):
-    """
-    PriceSmart (club de membresía).
-
-    Nota: su buscador (Bloomreach) devuelve precio 0 a invitados; los precios
-    requieren inicio de sesión de socio. Por eso está desactivado (scrape=False
-    en config). Esta clase queda como base si se dispone de credenciales de socio.
-    """
-
-    search_path = "/es-co/busqueda?q={query}"
-    card_selector = "[class*='ProductCard'], .product-card, article"
-    name_selector = "[class*='title'], h3, h2"
-    price_selector = "[class*='price'], .price"
 
 
 class D1Scraper(PlaywrightScraper):

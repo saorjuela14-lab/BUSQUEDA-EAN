@@ -246,9 +246,10 @@ function renderReport(report) {
   const k = report.kpis || {};
   const cat = CONFIG.categories[report.category] || {};
   const found = report.results.filter(r => r.found);
+  const notFound = report.results.filter(r => !r.found && (r.not_found_message || r.error));
   const competitors = found.filter(r => r.retailer !== 'makro');
   const pos = report.home_position || {};
-  if (!competitors.length && !pos.available) {
+  if (!competitors.length && !pos.available && !notFound.length) {
     document.getElementById('searchResult').innerHTML =
       `<div class="alert alert-warning">No se encontró el producto en ningún retailer. Importa el catálogo Makro o prueba con descripción para homologar.</div>`;
     return;
@@ -330,6 +331,34 @@ function renderReport(report) {
     </div>`;
   });
   html += `</div></div>`;
+
+  // Coincidencias adicionales por retailer (búsqueda por nombre)
+  const withMatches = report.results.filter(r => (r.matches || []).length > 1);
+  if (withMatches.length) {
+    html += `<h2 class="section-title">Coincidencias por cadena <span class="text-muted fw-normal small">(ordenadas por relevancia)</span></h2>`;
+    withMatches.forEach(r => {
+      const color = (CONFIG.retailers[r.retailer] || {}).color || '#888';
+      html += `<div class="card mb-2"><div class="card-body py-2">
+        <div class="fw-bold mb-2" style="color:${color}">${r.retailer_name}</div>
+        <div class="table-responsive"><table class="table table-sm mb-0"><thead><tr>
+          <th>Producto</th><th>Precio</th><th>Presentación</th><th>Relevancia</th>
+        </tr></thead><tbody>
+        ${(r.matches || []).map(m => `<tr>
+          <td>${m.url ? `<a href="${m.url}" target="_blank" rel="noopener">${m.product_name}</a>` : m.product_name}</td>
+          <td>${fmtCOP(m.promo_price || m.price)}</td>
+          <td class="text-muted small">${m.presentation || '—'}</td>
+          <td>${m.match_score != null ? m.match_score + '%' : '—'}</td>
+        </tr>`).join('')}
+        </tbody></table></div></div></div>`;
+    });
+  }
+
+  // Retailers sin coincidencias
+  if (notFound.length) {
+    html += `<div class="alert alert-secondary mt-3"><strong>Sin coincidencias:</strong><ul class="mb-0 mt-1">`;
+    html += notFound.map(r => `<li>${r.not_found_message || r.error || (r.retailer_name + ': no encontrado')}</li>`).join('');
+    html += `</ul></div>`;
+  }
 
   // Tabla de márgenes
   const perKgHeader = hasPerKg ? '<th>$/kg</th>' : '';

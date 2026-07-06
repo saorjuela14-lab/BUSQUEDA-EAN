@@ -259,11 +259,10 @@ def canonical_location_key(location_key) -> str | None:
 #   - Jumbo Colombia (Cencosud) publica su catálogo VTEX en jumbocolombia.com.
 #   - Metro comparte el MISMO canal online (jumbocolombia.com); se desactiva su
 #     scraping para no duplicar precios y mantener la precisión del promedio.
-#   - Makro es la referencia propia: su tienda exige "Pasaporte Makro" (login),
-#     no expone API pública y el costo lo aporta el comprador → no se scrapea.
+#   - Makro tienda online (tienda.makro.com.co) se consulta vía Playwright/Instaleap.
+#     El PVP de catálogo importado sigue siendo una fuente complementaria.
 #   - Alkosto usa buscador Algolia (API JSON, claves públicas de cliente).
-#   - PriceSmart es club de membresía: su API Bloomreach devuelve precio 0 a
-#     invitados (precios requieren login) → no se scrapea.
+#   - PriceSmart expone precios vía API Bloomreach Discovery (sin login).
 #   - Farmatodo no usa VTEX (sitio propio) → se trata como HTML (Playwright).
 # ──────────────────────────────────────────────────────────────────────────
 RETAILERS: dict[str, dict] = {
@@ -271,10 +270,10 @@ RETAILERS: dict[str, dict] = {
     "carulla": {"name": "Carulla", "priority": 1, "color": "#8bc63f", "base_url": "https://www.carulla.com", "tech": "vtex", "scrape": True},
     "jumbo": {"name": "Jumbo", "priority": 1, "color": "#2db84d", "base_url": "https://www.jumbocolombia.com", "tech": "vtex", "scrape": True},
     "metro": {"name": "Metro", "priority": 1, "color": "#e2231a", "base_url": "https://www.jumbocolombia.com", "tech": "vtex", "scrape": False},
-    "makro": {"name": "Makro", "priority": 1, "color": "#e2001a", "base_url": "https://www.makro.com.co", "tech": "vtex", "scrape": False},
+    "makro": {"name": "Makro", "priority": 1, "color": "#e2001a", "base_url": "https://tienda.makro.com.co", "tech": "makro_tienda", "scrape": True},
     "alkosto": {"name": "Alkosto", "priority": 1, "color": "#e30613", "base_url": "https://www.alkosto.com", "tech": "algolia", "scrape": True},
     "olimpica": {"name": "Olímpica", "priority": 1, "color": "#ed1c24", "base_url": "https://www.olimpica.com", "tech": "vtex", "scrape": True},
-    "pricesmart": {"name": "PriceSmart", "priority": 1, "color": "#004b8d", "base_url": "https://www.pricesmart.com", "tech": "bloomreach", "scrape": False},
+    "pricesmart": {"name": "PriceSmart", "priority": 1, "color": "#004b8d", "base_url": "https://www.pricesmart.com", "tech": "bloomreach", "scrape": True},
     # Prioridad 2
     "d1": {"name": "D1", "priority": 2, "color": "#e30613", "base_url": "https://domicilios.tiendasd1.com", "tech": "html", "scrape": True},
     "ara": {"name": "Ara", "priority": 2, "color": "#00a94f", "base_url": "https://aratiendas.com", "tech": "html", "scrape": True},
