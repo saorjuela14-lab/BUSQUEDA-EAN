@@ -14,6 +14,7 @@ Si la red falla, el retailer se reporta como no encontrado con el error.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Optional
 
 import requests
@@ -25,6 +26,16 @@ from services.rounding import round_cop
 from .base import BaseScraper, RetailerResult
 
 logger = logging.getLogger(__name__)
+
+# VTEX rechaza queries con sufijos de peso (ej. "500g") con HTTP 400.
+_VTEX_WEIGHT_SUFFIX_RE = re.compile(r"\b\d+\s*(?:g|gr|kg|ml|l|lt|cc|und|un|u)\b", re.IGNORECASE)
+
+
+def _vtex_safe_query(description: str) -> str:
+    """Elimina sufijos de peso/volumen que disparan 400 en la API VTEX."""
+    cleaned = _VTEX_WEIGHT_SUFFIX_RE.sub(" ", description)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned or description.strip()
 
 
 class VtexScraper(BaseScraper):
@@ -158,8 +169,12 @@ class VtexScraper(BaseScraper):
     ) -> list[tuple[MatchCandidate, RetailerResult]]:
         postal_code = city_postal_code(city)
         url = f"{self.base_url}/api/catalog_system/pub/products/search"
-        params = {"ft": description, "_from": 0, "_to": 49}
+        query = _vtex_safe_query(description)
+        params = {"ft": query, "_from": 0, "_to": 49}
         resp = self._session(postal_code).get(url, params=params, timeout=Config.SCRAPER_TIMEOUT)
+        if resp.status_code == 400 and query != description.strip():
+            params["ft"] = description.strip()
+            resp = self._session(postal_code).get(url, params=params, timeout=Config.SCRAPER_TIMEOUT)
         resp.raise_for_status()
         data = resp.json() or []
         out: list[tuple[MatchCandidate, RetailerResult]] = []

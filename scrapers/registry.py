@@ -52,6 +52,7 @@ def get_scrapers(
 def scrape_all(
     ean: str,
     description: Optional[str] = None,
+    match_description: Optional[str] = None,
     retailer_keys: Optional[list[str]] = None,
     priority: Optional[int] = None,
     city: Optional[str] = None,
@@ -70,7 +71,10 @@ def scrape_all(
     results: list[RetailerResult] = []
 
     with ThreadPoolExecutor(max_workers=Config.SCRAPER_MAX_WORKERS) as pool:
-        futures = {pool.submit(sc.search, ean, description, city, category): sc for sc in scrapers}
+        futures = {
+            pool.submit(sc.search, ean, description, city, category, match_description): sc
+            for sc in scrapers
+        }
         for fut in as_completed(futures):
             sc = futures[fut]
             try:

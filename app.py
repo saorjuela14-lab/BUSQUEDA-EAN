@@ -154,9 +154,12 @@ def api_search_name():
         return jsonify({"error": "El campo 'name' es obligatorio."}), 400
 
     weight_g = parse_weight(data.get("weight"), data.get("weight_unit", "g"))
+    # VTEX y otros buscadores fallan con sufijos de peso en la query (ej. "500g").
+    # Se consulta solo por nombre; el peso se usa para homologar y normalizar precios.
     search_description = name
+    match_description = name
     if weight_g:
-        search_description = f"{name} {format_weight_for_query(weight_g)}"
+        match_description = f"{name} {format_weight_for_query(weight_g)}"
 
     cities = data.get("cities")
     try:
@@ -166,6 +169,7 @@ def api_search_name():
                 cities=[str(c).strip() for c in cities],
                 cost=_int_or_none(data.get("cost")),
                 description=search_description,
+                match_description=match_description,
                 category=data.get("category") or None,
                 target_margin=_float_or_none(data.get("target_margin")),
                 target_weight_g=weight_g,
@@ -180,6 +184,7 @@ def api_search_name():
             synthetic_key(name, weight_g),
             cost=_int_or_none(data.get("cost")),
             description=search_description,
+            match_description=match_description,
             category=data.get("category") or None,
             target_margin=_float_or_none(data.get("target_margin")),
             target_weight_g=weight_g,

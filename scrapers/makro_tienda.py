@@ -15,6 +15,7 @@ from services.matching import MatchCandidate
 from services.rounding import round_cop
 
 from .base import BaseScraper, RetailerResult
+from .playwright_utils import launch_chromium
 
 _PRICE_LINE_RE = re.compile(r"^\$[\d.,]+$")
 _PROMO_LINE_RE = re.compile(r"^\(\$[\d.,]+\)$")
@@ -104,7 +105,7 @@ class MakroTiendaScraper(BaseScraper):
 
         search_url = f"{self.base_url}/search?name={quote(str(query))}"
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=Config.SCRAPER_HEADLESS)
+            browser = launch_chromium(p)
             try:
                 page = browser.new_page(user_agent=Config.USER_AGENT)
                 # Visitar home primero para fijar tienda por defecto (Av. Boyacá).

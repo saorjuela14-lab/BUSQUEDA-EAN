@@ -78,13 +78,13 @@ class BaseScraper:
         description: Optional[str] = None,
         city: Optional[str] = None,
         category: Optional[str] = None,
+        match_description: Optional[str] = None,
     ) -> RetailerResult:
         """
         Busca un producto: primero por EAN, luego por descripción (fallback).
 
-        `city` regionaliza la consulta cuando el motor lo soporta (VTEX).
-        `category` ajusta el umbral/normalización de homologación (ver
-        services/matching.py) — relevante sobre todo para "fruver".
+        `description` se usa para consultar el catálogo del retailer (sin peso).
+        `match_description` (opcional) enriquece la homologación con peso/tamaño.
         """
         try:
             result = None
@@ -95,7 +95,12 @@ class BaseScraper:
                 return result
 
             if description:
-                homologated = self._search_by_description(description, city=city, category=category)
+                homologated = self._search_by_description(
+                    description,
+                    city=city,
+                    category=category,
+                    match_description=match_description,
+                )
                 if homologated:
                     homologated.city = homologated.city or city
                     if not homologated.found:
@@ -135,8 +140,10 @@ class BaseScraper:
         description: str,
         city: Optional[str] = None,
         category: Optional[str] = None,
+        match_description: Optional[str] = None,
     ) -> Optional[RetailerResult]:
         """Homologación por descripción: devuelve el mejor match y el listado completo."""
+        match_text = (match_description or description).strip()
         candidates = self._fetch_candidates(description, city=city)
         if not candidates:
             return RetailerResult(
@@ -148,7 +155,7 @@ class BaseScraper:
             )
 
         cand_list = [c for c, _ in candidates]
-        relevant = filter_relevant_matches(description, cand_list, category=category)
+        relevant = filter_relevant_matches(match_text, cand_list, category=category)
         threshold = resolve_threshold(category)
 
         if not relevant:

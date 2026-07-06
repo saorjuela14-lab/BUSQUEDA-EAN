@@ -22,6 +22,7 @@ from services.matching import MatchCandidate
 from services.rounding import round_cop
 
 from .base import BaseScraper, RetailerResult
+from .playwright_utils import launch_chromium
 
 _PRICE_RE = re.compile(r"\$?\s*([\d.,]{3,})")
 
@@ -70,7 +71,7 @@ class PlaywrightScraper(BaseScraper):
             ) from exc
 
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=Config.SCRAPER_HEADLESS)
+            browser = launch_chromium(p)
             try:
                 page = browser.new_page(user_agent=Config.USER_AGENT)
                 page.goto(url, timeout=Config.SCRAPER_TIMEOUT * 1000, wait_until="domcontentloaded")
