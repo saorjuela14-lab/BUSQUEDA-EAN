@@ -125,10 +125,12 @@ class BaseScraper:
 
     @staticmethod
     def _result_to_match_dict(result: RetailerResult, score: float) -> dict:
+        effective = result.promo_price if result.promo_price is not None else result.price
         return {
             "product_name": result.product_name,
             "price": result.price,
             "promo_price": result.promo_price,
+            "effective_price": effective,
             "presentation": result.presentation,
             "url": result.url,
             "image_url": result.image_url,

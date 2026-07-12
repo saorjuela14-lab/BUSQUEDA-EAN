@@ -23,6 +23,7 @@ from . import alerts as alerts_mod
 from . import comparison, margins, strategies
 from .home_position import compute_home_position, home_position_alert
 from .makro_catalog import apply_makro_catalog, competitor_results
+from .search_catalog import build_search_catalog
 from .weight import enrich_result_weight_metadata, normalize_results_for_weight
 from scrapers import scrape_all
 
@@ -85,6 +86,8 @@ def run_query(
     else:
         results = [enrich_result_weight_metadata(r) for r in results]
 
+    search_catalog = build_search_catalog(results)
+
     # Determinar nombre/categoría del producto a partir de los hallazgos o catálogo.
     product_name = description
     match_mode = "ean"
@@ -137,6 +140,7 @@ def run_query(
         "city": city,
         "timestamp": datetime.utcnow().isoformat(),
         "results": results,
+        "search_catalog": search_catalog,
         "kpis": kpis,
         "margins": margin_rows,
         "margin_summary": margin_stats,

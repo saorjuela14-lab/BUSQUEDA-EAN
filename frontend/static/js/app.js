@@ -332,29 +332,13 @@ function renderReport(report) {
   });
   html += `</div></div>`;
 
-  // Coincidencias adicionales por retailer (búsqueda por nombre)
-  const withMatches = report.results.filter(r => (r.matches || []).length > 1);
-  if (withMatches.length) {
-    html += `<h2 class="section-title">Coincidencias por cadena <span class="text-muted fw-normal small">(ordenadas por relevancia)</span></h2>`;
-    withMatches.forEach(r => {
-      const color = (CONFIG.retailers[r.retailer] || {}).color || '#888';
-      html += `<div class="card mb-2"><div class="card-body py-2">
-        <div class="fw-bold mb-2" style="color:${color}">${r.retailer_name}</div>
-        <div class="table-responsive"><table class="table table-sm mb-0"><thead><tr>
-          <th>Producto</th><th>Precio</th><th>Presentación</th><th>Relevancia</th>
-        </tr></thead><tbody>
-        ${(r.matches || []).map(m => `<tr>
-          <td>${m.url ? `<a href="${m.url}" target="_blank" rel="noopener">${m.product_name}</a>` : m.product_name}</td>
-          <td>${fmtCOP(m.promo_price || m.price)}</td>
-          <td class="text-muted small">${m.presentation || '—'}</td>
-          <td>${m.match_score != null ? m.match_score + '%' : '—'}</td>
-        </tr>`).join('')}
-        </tbody></table></div></div></div>`;
-    });
+  // Catálogo completo por retailer (búsqueda por nombre)
+  if (byName) {
+    html += renderSearchCatalog(report);
   }
 
-  // Retailers sin coincidencias
-  if (notFound.length) {
+  // Retailers sin coincidencias (solo en búsqueda por EAN; en nombre ya está en el catálogo)
+  if (!byName && notFound.length) {
     html += `<div class="alert alert-secondary mt-3"><strong>Sin coincidencias:</strong><ul class="mb-0 mt-1">`;
     html += notFound.map(r => `<li>${r.not_found_message || r.error || (r.retailer_name + ': no encontrado')}</li>`).join('');
     html += `</ul></div>`;
@@ -399,6 +383,56 @@ function renderReport(report) {
   }
 
   document.getElementById('searchResult').innerHTML = html;
+}
+
+function renderSearchCatalog(report) {
+  const catalog = report.search_catalog || {};
+  const entries = Object.values(catalog).sort((a, b) => {
+    const pa = (CONFIG.retailers[a.retailer] || {}).priority || 9;
+    const pb = (CONFIG.retailers[b.retailer] || {}).priority || 9;
+    return pa - pb || (a.retailer_name || '').localeCompare(b.retailer_name || '', 'es');
+  });
+
+  if (!entries.length) return '';
+
+  let html = `<h2 class="section-title">Catálogo por cadena <span class="text-muted fw-normal small">(todas las coincidencias con precio)</span></h2>`;
+
+  entries.forEach(entry => {
+    const color = (CONFIG.retailers[entry.retailer] || {}).color || '#888';
+    const count = entry.product_count || 0;
+    const header = `<div class="d-flex justify-content-between align-items-center mb-2">
+      <span class="fw-bold" style="color:${color}">${entry.retailer_name}</span>
+      <span class="badge ${count ? 'bg-success' : 'bg-secondary'}">${count} producto${count === 1 ? '' : 's'}</span>
+    </div>`;
+
+    if (!entry.found || !count) {
+      const msg = entry.error || entry.not_found_message || 'Sin coincidencias';
+      html += `<div class="card mb-2 border-secondary"><div class="card-body py-2">${header}
+        <div class="text-muted small">${msg}</div></div></div>`;
+      return;
+    }
+
+    const products = entry.products || [];
+    html += `<div class="card mb-2"><div class="card-body py-2">${header}
+      <div class="table-responsive"><table class="table table-sm mb-0"><thead><tr>
+        <th>#</th><th>Producto</th><th>Precio regular</th><th>Precio promo</th><th>Presentación</th><th>Relevancia</th>
+      </tr></thead><tbody>
+      ${products.map((m, i) => {
+        const eff = m.effective_price || m.promo_price || m.price;
+        const isBest = i === 0 ? ' class="table-success"' : '';
+        return `<tr${isBest}>
+          <td>${i + 1}</td>
+          <td>${m.url ? `<a href="${m.url}" target="_blank" rel="noopener">${m.product_name}</a>` : m.product_name}</td>
+          <td>${fmtCOP(m.price)}</td>
+          <td>${m.promo_price ? `<span class="text-red fw-bold">${fmtCOP(m.promo_price)}</span>` : '<span class="text-muted">—</span>'}</td>
+          <td class="text-muted small">${m.presentation || '—'}</td>
+          <td>${m.match_score != null ? m.match_score + '%' : '—'}</td>
+        </tr>`;
+      }).join('')}
+      </tbody></table></div></div></div>`;
+  });
+
+  return html;
 }
 
 async function exportExcel(ean, cost, category, description, city) {
