@@ -145,10 +145,12 @@ class MakroTiendaScraper(BaseScraper):
         self, description: str, city: Optional[str] = None
     ) -> list[tuple[MatchCandidate, RetailerResult]]:
         out: list[tuple[MatchCandidate, RetailerResult]] = []
-        for item in self._items_from_query(description):
+        for rank, item in enumerate(self._items_from_query(description)):
             name = item.get("product_name")
             if not name:
                 continue
             result = self._item_to_result(item, found=False, query=description, city=city)
-            out.append((MatchCandidate(name=name, payload={}), result))
+            out.append(
+                (MatchCandidate(name=name, payload={"catalog_rank": rank}), result)
+            )
         return out

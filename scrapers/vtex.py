@@ -170,7 +170,7 @@ class VtexScraper(BaseScraper):
         postal_code = city_postal_code(city)
         url = f"{self.base_url}/api/catalog_system/pub/products/search"
         query = _vtex_safe_query(description)
-        params = {"ft": query, "_from": 0, "_to": 49}
+        params = {"ft": query, "_from": 0, "_to": 23}
         resp = self._session(postal_code).get(url, params=params, timeout=Config.SCRAPER_TIMEOUT)
         if resp.status_code == 400 and query != description.strip():
             params["ft"] = description.strip()
@@ -178,12 +178,18 @@ class VtexScraper(BaseScraper):
         resp.raise_for_status()
         data = resp.json() or []
         out: list[tuple[MatchCandidate, RetailerResult]] = []
-        for product in data:
+        for rank, product in enumerate(data):
             result = self._parse_product(product)
             if result and result.product_name:
                 result.found = False  # se marcará found tras homologar
                 result.city = city
                 out.append(
-                    (MatchCandidate(name=result.product_name, payload={}), result)
+                    (
+                        MatchCandidate(
+                            name=result.product_name,
+                            payload={"catalog_rank": rank},
+                        ),
+                        result,
+                    )
                 )
         return out

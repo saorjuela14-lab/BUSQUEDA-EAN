@@ -1,12 +1,9 @@
 """
 Homologación inteligente de productos.
 
-Cuando un retailer no encuentra el EAN, se busca por descripción y se calcula
-un score de relevancia compuesto (no solo similitud difusa) con rapidfuzz.
-Prioriza coincidencias exactas y al inicio del nombre; penaliza cuando el
-término buscado aparece solo como ingrediente, sabor o descriptor secundario.
-
-Ejemplo: "Arándanos" -> "Arándanos Kosher" antes que "Pudín con arándanos".
+Prioriza coincidencias donde el término buscado describe el producto principal
+(no un sabor/ingrediente secundario). Filtra candidatos irrelevantes antes de
+puntuar y respeta el orden del catálogo del retailer como desempate.
 """
 from __future__ import annotations
 
@@ -19,7 +16,6 @@ from rapidfuzz import fuzz
 
 from config import Config
 
-# Unidades de medida normalizadas a una base común.
 _UNIT_TO_BASE = {
     "kg": ("weight", 1000.0),
     "g": ("weight", 1.0),
@@ -37,17 +33,20 @@ _SIZE_RE = re.compile(
     r"(\d+(?:[.,]\d+)?)\s*(kg|gr|g|lt|l|ml|cc|und|un|u)\b", re.IGNORECASE
 )
 
-# Conectores que suelen separar el producto principal de ingredientes secundarios.
 _INGREDIENT_BREAK = frozenset({"con", "y", "de", "en", "para", "sin"})
 
-# Tipos de producto elaborado: si el nombre empieza así y el término buscado
-# solo aparece después, se penaliza (ej. "Yoghurt ... Arándanos").
+# Productos elaborados: si el nombre empieza así, el término buscado suele ser
+# sabor/variante y NO el producto que el usuario quiere comparar.
 _SECONDARY_HEAD = frozenset(
     {
         "yoghurt", "yogurt", "yogur", "pudin", "puding", "leche", "jugo", "galleta",
         "bebida", "mezcla", "mani", "barra", "cereal", "smoothie", "helado",
         "mermelada", "confiture", "snack", "bar", "pastel", "torta", "postre",
-        "granola", "mix", "chocolate", "cereal", "avena", "granola",
+        "granola", "mix", "chocolate", "avena", "pan", "te", "cafe", "whisky",
+        "cerveza", "aceite", "arroz", "salchicha", "queso", "papel", "barra",
+        "confite", "dulce", "caramelo", "mantequilla", "margarina", "salsa",
+        "jugo", "muffin", "waffle", "bagel", "mani", "frito", "lay",
+        "pasaboca", "pasabocas", "snack",
     }
 )
 
@@ -57,7 +56,7 @@ class MatchCandidate:
     """Candidato a homologar (resultado crudo de un retailer)."""
 
     name: str
-    payload: dict  # datos arbitrarios asociados (precio, url, etc.)
+    payload: dict  # catalog_rank, precio, url, etc.
 
 
 @dataclass
@@ -66,10 +65,6 @@ class MatchResult:
     score: float  # 0-100
 
 
-# Palabras de relleno sin valor discriminante entre presentaciones de un mismo
-# producto (unidad de venta, conectores). Quitarlas antes de comparar evita que
-# "AGUACATE KG" pierda similitud frente a "Aguacate Hass x Kg Granel" solo por
-# tokens que no describen el producto en sí.
 _NOISE_WORDS = {
     "x", "de", "del", "la", "el", "los", "las",
     "granel", "unidad", "und", "un", "u",
@@ -79,7 +74,6 @@ _NOISE_WORDS = {
 
 
 def _strip_accents(text: str) -> str:
-    """Quita tildes/diéresis y normaliza ñ→n para comparación robusta en español."""
     normalized = unicodedata.normalize("NFKD", text)
     return "".join(c for c in normalized if not unicodedata.combining(c))
 
@@ -94,7 +88,6 @@ def _normalize(text: str, *, strip_noise: bool = False) -> str:
 
 
 def _primary_tokens(name: str, *, strip_noise: bool = False) -> list[str]:
-    """Tokens del nombre principal (antes de conectores de ingrediente)."""
     tokens = _normalize(name, strip_noise=strip_noise).split()
     primary: list[str] = []
     for token in tokens:
@@ -104,12 +97,11 @@ def _primary_tokens(name: str, *, strip_noise: bool = False) -> list[str]:
     return primary
 
 
-def extract_size(text: str) -> Optional[tuple[str, float]]:
-    """
-    Extrae (dimensión, magnitud_base) de un texto.
+def _query_tokens(query: str, *, strip_noise: bool = False) -> list[str]:
+    return [t for t in _normalize(query, strip_noise=strip_noise).split() if t]
 
-    Ej: "Leche 1100 ml" -> ("volume", 1100.0); "Pan x600g" -> ("weight", 600.0).
-    """
+
+def extract_size(text: str) -> Optional[tuple[str, float]]:
     match = _SIZE_RE.search(text)
     if not match:
         return None
@@ -122,12 +114,6 @@ def extract_size(text: str) -> Optional[tuple[str, float]]:
 
 
 def _size_penalty(query: str, candidate: str) -> float:
-    """
-    Penalización 0..1 por diferencia de presentación (tamaño/contenido).
-
-    0 = mismo tamaño; cuanto mayor la diferencia relativa, mayor la penalización.
-    Si no se detecta tamaño en alguno, no se penaliza (retorna 0).
-    """
     q = extract_size(query)
     c = extract_size(candidate)
     if not q or not c:
@@ -141,14 +127,56 @@ def _size_penalty(query: str, candidate: str) -> float:
     return min(rel_diff, 1.0)
 
 
-def _relevance_adjustments(query: str, candidate: str, *, strip_noise: bool) -> float:
+def is_relevant_candidate(
+    query: str, candidate: str, *, category: Optional[str] = None
+) -> bool:
     """
-    Bonificaciones y penalizaciones de relevancia semántica (-40..+45).
+    Filtro duro de relevancia: descarta productos que solo comparten el término
+    como sabor, ingrediente o categoría distinta a la intención del usuario.
+    """
+    q_tokens = _query_tokens(query, strip_noise=False)
+    if not q_tokens:
+        return False
 
-  - Coincidencia exacta o al inicio del nombre: bonus alto.
-  - Término solo tras "con"/"y"/"de": penalización fuerte.
-  - Producto elaborado cuyo sabor coincide pero no el producto base: penalización.
-    """
+    # No quitar "de/con/y" aquí: se necesitan para detectar ingredientes secundarios.
+    c_norm = _normalize(candidate, strip_noise=False)
+    primary = _primary_tokens(candidate, strip_noise=False)
+
+    if not all(re.search(rf"\b{re.escape(t)}\b", c_norm) for t in q_tokens):
+        return False
+
+    if len(q_tokens) == 1:
+        qt = q_tokens[0]
+
+        if re.search(rf"\b(con|y|de|en)\s+.*\b{re.escape(qt)}\b", c_norm):
+            if not (primary and primary[0] == qt):
+                return False
+
+        if primary and primary[0] in _SECONDARY_HEAD:
+            return False
+
+        idx = next(
+            (i for i, t in enumerate(primary) if t == qt or (len(qt) >= 4 and t.startswith(qt))),
+            -1,
+        )
+        if idx < 0:
+            return c_norm.startswith(qt)
+
+        tail = primary[idx + 1 :]
+        if any(t in _SECONDARY_HEAD for t in tail):
+            return False
+
+        return idx <= 4
+
+    if primary and primary[0] in _SECONDARY_HEAD and primary[0] not in q_tokens:
+        return False
+
+    return bool(primary and all(t in primary for t in q_tokens)) or all(
+        t in c_norm.split()[: max(3, len(q_tokens) + 1)] for t in q_tokens
+    )
+
+
+def _relevance_adjustments(query: str, candidate: str, *, strip_noise: bool) -> float:
     q_norm = _normalize(query, strip_noise=strip_noise)
     c_norm = _normalize(candidate, strip_noise=strip_noise)
     q_tokens = q_norm.split()
@@ -156,49 +184,23 @@ def _relevance_adjustments(query: str, candidate: str, *, strip_noise: bool) -> 
     delta = 0.0
 
     if q_norm == c_norm:
-        return 45.0
-    if c_norm.startswith(q_norm):
-        delta += 20.0
+        return 30.0
     if primary and q_tokens and primary[0] == q_tokens[0]:
-        delta += 18.0
-    elif primary and q_tokens and all(t in primary for t in q_tokens):
-        delta += 10.0
+        delta += 15.0
+    elif c_norm.startswith(q_norm):
+        delta += 12.0
+    if primary and q_tokens and all(t in primary for t in q_tokens):
+        delta += 8.0
 
-    if all(re.search(rf"\b{re.escape(t)}\b", c_norm) for t in q_tokens):
-        delta += 5.0
-    else:
-        delta -= 10.0
-
-    if re.search(rf"\b(con|y|de|en)\s+.*\b{re.escape(q_norm)}\b", c_norm):
-        delta -= 30.0
-    if " con " in f" {c_norm} " and not all(t in primary for t in q_tokens):
-        delta -= 25.0
-
-    if (
-        primary
-        and primary[0] in _SECONDARY_HEAD
-        and primary[0] not in q_tokens
-        and any(t in primary[1:] for t in q_tokens)
-    ):
-        delta -= 30.0
-
+    if primary and q_tokens and primary[0] in _SECONDARY_HEAD and primary[0] not in q_tokens:
+        delta -= 35.0
     if primary and q_tokens and q_tokens[0] not in primary[:2] and any(t in primary[2:] for t in q_tokens):
-        delta -= 15.0
-
-    if primary and q_tokens and primary[0].startswith(q_tokens[0]) and primary[0] != q_tokens[0]:
-        delta -= 8.0
+        delta -= 20.0
 
     return delta
 
 
 def resolve_threshold(category: Optional[str] = None) -> int:
-    """
-    Umbral mínimo de homologación según categoría.
-
-    Fruver usa un umbral más bajo: nombres cortos/genéricos ("AGUACATE KG")
-    contra nombres comerciales con variedad ("Aguacate Hass x Kg") pierden
-    similitud sin ser productos distintos.
-    """
     if category and category.strip().lower() == "fruver":
         return Config.MATCH_THRESHOLD_FRUVER
     return Config.MATCH_THRESHOLD
@@ -206,21 +208,43 @@ def resolve_threshold(category: Optional[str] = None) -> int:
 
 def similarity(query: str, candidate: str, *, category: Optional[str] = None) -> float:
     """
-    Score de similitud 0-100 entre dos descripciones de producto.
-
-    Combina similitud textual (rapidfuzz), ajustes de relevancia semántica
-    y penalización por diferencia de presentación/tamaño.
+    Score 0-100. Para consultas cortas compara contra el nombre principal del
+    producto (no el string completo con sabores/marcas al final).
     """
     is_fruver = bool(category and category.strip().lower() == "fruver")
     q_norm = _normalize(query, strip_noise=is_fruver)
     c_norm = _normalize(candidate, strip_noise=is_fruver)
+    q_tokens = q_norm.split()
+    primary = _primary_tokens(candidate, strip_noise=is_fruver)
+    primary_str = " ".join(primary)
 
-    base = float(fuzz.token_set_ratio(q_norm, c_norm))
+    if len(q_tokens) <= 2:
+        compare_str = primary_str or c_norm
+        if q_tokens and primary:
+            qt = q_tokens[0]
+            if primary[0] == qt:
+                compare_str = primary_str or c_norm
+            elif qt in primary:
+                idx = next(i for i, t in enumerate(primary) if t == qt)
+                compare_str = " ".join(primary[idx : min(len(primary), idx + 3)])
+        base = max(
+            float(fuzz.ratio(q_norm, compare_str)),
+            float(fuzz.partial_ratio(q_norm, c_norm)),
+        )
+    else:
+        base = float(fuzz.token_set_ratio(q_norm, c_norm))
+
     base += _relevance_adjustments(query, candidate, strip_noise=is_fruver)
-
     penalty = _size_penalty(query, candidate)
-    score = base * (1 - 0.4 * penalty)
+    score = base * (1 - 0.35 * penalty)
     return round(min(100.0, max(0.0, score)), 1)
+
+
+def _catalog_rank(candidate: MatchCandidate) -> int:
+    try:
+        return int(candidate.payload.get("catalog_rank", 999))
+    except (TypeError, ValueError):
+        return 999
 
 
 def best_match(
@@ -230,28 +254,21 @@ def best_match(
     *,
     category: Optional[str] = None,
 ) -> Optional[MatchResult]:
-    """
-    Devuelve el mejor candidato por encima del umbral, o None.
-
-    Entre varios candidatos del mismo retailer, elige el de mayor score.
-    """
-    if not candidates:
-        return None
-    threshold = resolve_threshold(category) if threshold is None else threshold
-
-    scored = [MatchResult(c, similarity(query, c.name, category=category)) for c in candidates]
-    scored.sort(key=lambda m: m.score, reverse=True)
-    top = scored[0]
-    return top if top.score >= threshold else None
+    ranked = filter_relevant_matches(query, candidates, category=category, threshold=threshold)
+    return ranked[0] if ranked else None
 
 
 def rank_matches(
     query: str, candidates: Sequence[MatchCandidate], *, category: Optional[str] = None
 ) -> list[MatchResult]:
-    """Devuelve todos los candidatos ordenados por score descendente."""
-    scored = [MatchResult(c, similarity(query, c.name, category=category)) for c in candidates]
-    scored.sort(key=lambda m: m.score, reverse=True)
-    return scored
+    threshold = 0
+    results: list[MatchResult] = []
+    for candidate in candidates:
+        if not is_relevant_candidate(query, candidate.name, category=category):
+            continue
+        results.append(MatchResult(candidate, similarity(query, candidate.name, category=category)))
+    results.sort(key=lambda m: (-m.score, _catalog_rank(m.candidate)))
+    return results
 
 
 def filter_relevant_matches(
@@ -261,7 +278,14 @@ def filter_relevant_matches(
     category: Optional[str] = None,
     threshold: int | None = None,
 ) -> list[MatchResult]:
-    """Candidatos por encima del umbral, ordenados por relevancia."""
+    """Candidatos relevantes por encima del umbral, ordenados por score y ranking del retailer."""
     threshold = resolve_threshold(category) if threshold is None else threshold
-    ranked = rank_matches(query, candidates, category=category)
-    return [m for m in ranked if m.score >= threshold]
+    results: list[MatchResult] = []
+    for candidate in candidates:
+        if not is_relevant_candidate(query, candidate.name, category=category):
+            continue
+        score = similarity(query, candidate.name, category=category)
+        if score >= threshold:
+            results.append(MatchResult(candidate, score))
+    results.sort(key=lambda m: (-m.score, _catalog_rank(m.candidate)))
+    return results

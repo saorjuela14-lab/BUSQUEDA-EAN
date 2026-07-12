@@ -113,8 +113,16 @@ class AlgoliaScraper(BaseScraper):
         self, description: str, city: Optional[str] = None
     ) -> list[tuple[MatchCandidate, RetailerResult]]:
         out: list[tuple[MatchCandidate, RetailerResult]] = []
-        for hit in self._query(description, hits_per_page=30):
+        for rank, hit in enumerate(self._query(description, hits_per_page=24)):
             result = self._hit_to_result(hit, found=False)
             if result and result.product_name:
-                out.append((MatchCandidate(name=result.product_name, payload={}), result))
+                out.append(
+                    (
+                        MatchCandidate(
+                            name=result.product_name,
+                            payload={"catalog_rank": rank},
+                        ),
+                        result,
+                    )
+                )
         return out

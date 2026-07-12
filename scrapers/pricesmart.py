@@ -108,9 +108,17 @@ class PriceSmartScraper(BaseScraper):
         self, description: str, city: Optional[str] = None
     ) -> list[tuple[MatchCandidate, RetailerResult]]:
         out: list[tuple[MatchCandidate, RetailerResult]] = []
-        for doc in self._query(description, rows=24):
+        for rank, doc in enumerate(self._query(description, rows=24)):
             result = self._doc_to_result(doc, found=False)
             if result and result.product_name:
                 result.city = city
-                out.append((MatchCandidate(name=result.product_name, payload={}), result))
+                out.append(
+                    (
+                        MatchCandidate(
+                            name=result.product_name,
+                            payload={"catalog_rank": rank},
+                        ),
+                        result,
+                    )
+                )
         return out
