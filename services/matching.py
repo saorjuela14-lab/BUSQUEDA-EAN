@@ -33,6 +33,11 @@ _SIZE_RE = re.compile(
     r"(\d+(?:[.,]\d+)?)\s*(kg|gr|g|lt|l|ml|cc|und|un|u)\b", re.IGNORECASE
 )
 
+# Sufijos de peso/volumen en la consulta (ej. "500g", "1 kg") — no son parte del nombre.
+_QUERY_WEIGHT_RE = re.compile(
+    r"\b\d+(?:[.,]\d+)?\s*(?:kg|gr|g|lt|l|ml|cc|und|un|u)\b", re.IGNORECASE
+)
+
 _INGREDIENT_BREAK = frozenset({"con", "y", "de", "en", "para", "sin"})
 
 # Productos elaborados: si el nombre empieza así, el término buscado suele ser
@@ -101,6 +106,17 @@ def _query_tokens(query: str, *, strip_noise: bool = False) -> list[str]:
     return [t for t in _normalize(query, strip_noise=strip_noise).split() if t]
 
 
+def _name_part_query(query: str) -> str:
+    """
+    Quita peso/volumen de la consulta para homologación por nombre.
+
+    Ej: "arandanos 500g" -> "arandanos". El peso se usa aparte (size_penalty).
+    """
+    cleaned = _QUERY_WEIGHT_RE.sub(" ", query)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned or query.strip()
+
+
 def extract_size(text: str) -> Optional[tuple[str, float]]:
     match = _SIZE_RE.search(text)
     if not match:
@@ -134,7 +150,8 @@ def is_relevant_candidate(
     Filtro duro de relevancia: descarta productos que solo comparten el término
     como sabor, ingrediente o categoría distinta a la intención del usuario.
     """
-    q_tokens = _query_tokens(query, strip_noise=False)
+    name_query = _name_part_query(query)
+    q_tokens = _query_tokens(name_query, strip_noise=False)
     if not q_tokens:
         return False
 
@@ -208,11 +225,12 @@ def resolve_threshold(category: Optional[str] = None) -> int:
 
 def similarity(query: str, candidate: str, *, category: Optional[str] = None) -> float:
     """
-    Score 0-100. Para consultas cortas compara contra el nombre principal del
-    producto (no el string completo con sabores/marcas al final).
+    Score 0-100. Compara el nombre del producto (sin peso en la consulta) y
+    aplica penalización por diferencia de presentación usando el peso indicado.
     """
     is_fruver = bool(category and category.strip().lower() == "fruver")
-    q_norm = _normalize(query, strip_noise=is_fruver)
+    name_query = _name_part_query(query)
+    q_norm = _normalize(name_query, strip_noise=is_fruver)
     c_norm = _normalize(candidate, strip_noise=is_fruver)
     q_tokens = q_norm.split()
     primary = _primary_tokens(candidate, strip_noise=is_fruver)
@@ -234,7 +252,7 @@ def similarity(query: str, candidate: str, *, category: Optional[str] = None) ->
     else:
         base = float(fuzz.token_set_ratio(q_norm, c_norm))
 
-    base += _relevance_adjustments(query, candidate, strip_noise=is_fruver)
+    base += _relevance_adjustments(name_query, candidate, strip_noise=is_fruver)
     penalty = _size_penalty(query, candidate)
     score = base * (1 - 0.35 * penalty)
     return round(min(100.0, max(0.0, score)), 1)

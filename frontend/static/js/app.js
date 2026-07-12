@@ -249,7 +249,9 @@ function renderReport(report) {
   const notFound = report.results.filter(r => !r.found && (r.not_found_message || r.error));
   const competitors = found.filter(r => r.retailer !== 'makro');
   const pos = report.home_position || {};
-  if (!competitors.length && !pos.available && !notFound.length) {
+  const byName = report.search_mode === 'name';
+  const catalogHasProducts = byName && Object.values(report.search_catalog || {}).some(e => (e.product_count || 0) > 0);
+  if (!competitors.length && !pos.available && !notFound.length && !catalogHasProducts) {
     document.getElementById('searchResult').innerHTML =
       `<div class="alert alert-warning">No se encontró el producto en ningún retailer. Importa el catálogo Makro o prueba con descripción para homologar.</div>`;
     return;
@@ -258,7 +260,6 @@ function renderReport(report) {
   const chartRows = found.filter(r => r.price || r.promo_price);
   const maxEff = chartRows.length ? Math.max(...chartRows.map(r => r.effective_price || r.price || r.promo_price)) : 1;
 
-  const byName = report.search_mode === 'name';
   // En búsqueda por nombre el EAN es sintético: no lo mostramos.
   const eanLabel = byName ? '' : `<span class="text-muted ms-2">EAN: ${report.ean}</span>`;
   const modeBadge = byName
