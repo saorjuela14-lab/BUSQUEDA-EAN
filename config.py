@@ -275,7 +275,7 @@ RETAILERS: dict[str, dict] = {
     "olimpica": {"name": "Olímpica", "priority": 1, "color": "#ed1c24", "base_url": "https://www.olimpica.com", "tech": "vtex", "scrape": True},
     "pricesmart": {"name": "PriceSmart", "priority": 1, "color": "#004b8d", "base_url": "https://www.pricesmart.com", "tech": "bloomreach", "scrape": True},
     # Prioridad 2
-    "d1": {"name": "D1", "priority": 2, "color": "#e30613", "base_url": "https://domicilios.tiendasd1.com", "tech": "html", "scrape": True},
+    "d1": {"name": "D1", "priority": 2, "color": "#e30613", "base_url": "https://www.d1.com.co", "tech": "vtex", "scrape": True},
     "ara": {"name": "Ara", "priority": 2, "color": "#00a94f", "base_url": "https://aratiendas.com", "tech": "html", "scrape": True},
     "isimo": {"name": "Ísimo", "priority": 2, "color": "#ff6600", "base_url": "https://www.isimo.com.co", "tech": "html", "scrape": True},
     "farmatodo": {"name": "Farmatodo", "priority": 2, "color": "#005baa", "base_url": "https://www.farmatodo.com.co", "tech": "html", "scrape": True},

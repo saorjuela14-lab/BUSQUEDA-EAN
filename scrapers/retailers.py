@@ -57,10 +57,8 @@ class MakroScraper(MakroTiendaScraper):
 # ── Retailers con render dinámico (Playwright) ─────────────────────────────
 
 
-class D1Scraper(PlaywrightScraper):
-    """Tiendas D1."""
-
-    search_path = "/search?q={query}"
+class D1Scraper(VtexScraper):
+    """Tiendas D1 (VTEX en www.d1.com.co)."""
 
 
 class AraScraper(PlaywrightScraper):

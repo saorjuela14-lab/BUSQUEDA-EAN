@@ -19,7 +19,7 @@ def _match_from_result(result: dict) -> Optional[dict]:
         "product_name": result.get("product_name"),
         "price": price,
         "promo_price": promo,
-        "effective_price": result.get("effective_price") or promo or price,
+        "effective_price": result.get("effective_price") or price or promo,
         "presentation": result.get("presentation"),
         "url": result.get("url"),
         "image_url": result.get("image_url"),
@@ -47,7 +47,7 @@ def build_search_catalog(results: list[dict]) -> dict[str, dict]:
         for product in products:
             if product.get("effective_price") is None:
                 product["effective_price"] = (
-                    product.get("promo_price") or product.get("price")
+                    product.get("price") or product.get("promo_price")
                 )
 
         catalog[key] = {

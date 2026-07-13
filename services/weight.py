@@ -102,7 +102,7 @@ def enrich_result_weight_metadata(result: dict) -> dict:
         if promo is not None:
             result["promo_price_per_kg"] = _price_per_kg_from_package(promo, package_kg)
 
-    result["effective_price"] = promo if promo is not None else price
+    result["effective_price"] = price
 
     for match in result.get("matches") or []:
         _enrich_match_metadata(match)
@@ -121,7 +121,7 @@ def _enrich_match_metadata(match: dict) -> dict:
         match["price_per_kg"] = _price_per_kg_from_package(price, package_kg)
         if promo is not None:
             match["promo_price_per_kg"] = _price_per_kg_from_package(promo, package_kg)
-    match["effective_price"] = promo if promo is not None else price
+    match["effective_price"] = price
     return match
 
 
@@ -137,7 +137,7 @@ def _scale_match_for_weight(match: dict, target_kg: float, target_grams: float) 
     promo_ppk = match.get("promo_price_per_kg")
     if promo_ppk is not None:
         match["promo_price"] = round_cop(promo_ppk * target_kg)
-    match["effective_price"] = match.get("promo_price") or match.get("price")
+    match["effective_price"] = match.get("price")
     match["weight_normalized"] = True
     match["target_weight_g"] = target_grams
 
@@ -171,7 +171,7 @@ def normalize_results_for_weight(results: list[dict], target_grams: float) -> li
 
         r["weight_normalized"] = True
         r["target_weight_g"] = target_grams
-        r["effective_price"] = r.get("promo_price") or r.get("price")
+        r["effective_price"] = r.get("price")
 
         for match in r.get("matches") or []:
             _scale_match_for_weight(match, target_kg, target_grams)

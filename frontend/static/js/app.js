@@ -256,9 +256,10 @@ function renderReport(report) {
       `<div class="alert alert-warning">No se encontró el producto en ningún retailer. Importa el catálogo Makro o prueba con descripción para homologar.</div>`;
     return;
   }
-  // Precio de referencia para escalar barras: SIEMPRE el regular (sin descuento).
+  // Precio de referencia para escalar barras: SIEMPRE el precio regular (sin descuento).
   const chartRows = found.filter(r => r.price || r.promo_price);
-  const maxEff = chartRows.length ? Math.max(...chartRows.map(r => r.effective_price || r.price || r.promo_price)) : 1;
+  const regularPrice = (r) => r.price ?? r.promo_price;
+  const maxEff = chartRows.length ? Math.max(...chartRows.map(regularPrice)) : 1;
 
   // En búsqueda por nombre el EAN es sintético: no lo mostramos.
   const eanLabel = byName ? '' : `<span class="text-muted ms-2">EAN: ${report.ean}</span>`;
@@ -315,10 +316,10 @@ function renderReport(report) {
     </div>`;
 
   // Distribución de precios (basada en el precio regular, sin descuento)
-  const sorted = [...found].sort((a, b) => (a.effective_price||a.price) - (b.effective_price||b.price));
+  const sorted = [...found].sort((a, b) => regularPrice(a) - regularPrice(b));
   html += `<div class="card mt-3"><div class="card-body"><h6 class="card-title">Distribución de precios por cadena <span class="text-muted fw-normal small">(precio regular, sin descuento${weightNote})</span></h6>`;
   sorted.forEach(r => {
-    const reg = r.effective_price || r.price || r.promo_price;
+    const reg = regularPrice(r);
     const w = Math.max(8, Math.round((reg / (maxEff * 1.05)) * 100));
     const color = (CONFIG.retailers[r.retailer] || {}).color || '#e2001a';
     const isMakro = r.retailer === 'makro';
