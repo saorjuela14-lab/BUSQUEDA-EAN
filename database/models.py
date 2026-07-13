@@ -35,6 +35,8 @@ class Product(Base):
     cost: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # PVP Makro (precio de venta al público) importado desde catálogo.
     pvp: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # SKU interno Makro ("Regular" en el catálogo) para búsqueda en tienda.makro.com.co.
+    makro_sku: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     catalog_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -52,6 +54,7 @@ class Product(Base):
             "subcategory": self.subcategory,
             "cost": self.cost,
             "pvp": self.pvp,
+            "makro_sku": self.makro_sku,
             "catalog_updated_at": self.catalog_updated_at.isoformat() if self.catalog_updated_at else None,
         }
 

@@ -28,6 +28,7 @@ def build_makro_result(catalog: Optional[dict]) -> Optional[dict]:
         "url": meta.get("base_url"),
         "match_mode": "catalog",
         "match_score": None,
+        "makro_sku": catalog.get("makro_sku"),
         "source": "catalog",
     }
 
@@ -56,6 +57,8 @@ def apply_makro_catalog(
         if makro_catalog:
             existing["catalog_pvp"] = makro_catalog["price"]
             existing["catalog_product_name"] = makro_catalog.get("product_name")
+            if makro_catalog.get("makro_sku"):
+                existing["makro_sku"] = existing.get("makro_sku") or makro_catalog["makro_sku"]
             if existing.get("match_mode") != "catalog":
                 existing["source"] = existing.get("source") or "scrape"
         return results, catalog, pvp or existing.get("catalog_pvp")

@@ -28,6 +28,7 @@ def upsert_product(
     subcategory: str | None = None,
     cost: int | None = None,
     pvp: int | None = None,
+    makro_sku: str | None = None,
     touch_catalog: bool = False,
 ) -> dict:
     """Crea o actualiza un producto por EAN y devuelve su representación."""
@@ -46,6 +47,8 @@ def upsert_product(
             product.cost = cost
         if pvp is not None:
             product.pvp = pvp
+        if makro_sku is not None:
+            product.makro_sku = makro_sku
         if touch_catalog:
             product.catalog_updated_at = datetime.utcnow()
         s.flush()
@@ -84,7 +87,8 @@ def import_catalog_rows(rows: list[dict]) -> dict:
     """
     Importa/actualiza productos del catálogo Makro en lote.
 
-    Cada fila espera: ean, name, pvp; opcionalmente category y cost.
+    Cada fila espera: ean, name; y al menos uno de pvp o makro_sku.
+    Opcionalmente: category, cost, brand.
     """
     imported = 0
     errors: list[str] = []
@@ -95,8 +99,9 @@ def import_catalog_rows(rows: list[dict]) -> dict:
             continue
         name = str(row.get("name") or ean).strip()
         pvp = row.get("pvp")
-        if pvp is None:
-            errors.append(f"Fila {idx} (EAN {ean}): PVP vacío o inválido.")
+        makro_sku = str(row.get("makro_sku") or "").strip() or None
+        if pvp is None and not makro_sku:
+            errors.append(f"Fila {idx} (EAN {ean}): falta PVP o SKU Makro (Regular).")
             continue
         category = str(row.get("category") or "dairy").strip() or "dairy"
         try:
@@ -104,8 +109,10 @@ def import_catalog_rows(rows: list[dict]) -> dict:
                 ean,
                 name,
                 category,
+                brand=row.get("brand"),
                 cost=row.get("cost"),
                 pvp=pvp,
+                makro_sku=makro_sku,
                 touch_catalog=True,
             )
             imported += 1
@@ -119,10 +126,12 @@ def catalog_stats() -> dict:
     with get_session() as s:
         total = s.scalar(select(func.count(Product.id))) or 0
         with_pvp = s.scalar(select(func.count(Product.id)).where(Product.pvp.isnot(None))) or 0
+        with_sku = s.scalar(select(func.count(Product.id)).where(Product.makro_sku.isnot(None))) or 0
         last_update = s.scalar(select(func.max(Product.catalog_updated_at)))
         return {
             "total_products": total,
             "with_pvp": with_pvp,
+            "with_sku": with_sku,
             "last_updated": last_update.isoformat() if last_update else None,
         }
 

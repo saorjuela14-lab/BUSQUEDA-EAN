@@ -34,6 +34,7 @@ from config import (
 from database import init_db, repository
 from export import export_report
 from services import bulk, catalog_import, pricing_service
+from services.catalog_import import ensure_default_makro_catalog
 from services.keys import synthetic_key
 from services.weight import format_weight_for_query, format_weight_label, parse_weight
 
@@ -65,6 +66,13 @@ CORS(app)
 
 # Inicializar base de datos al arrancar.
 init_db()
+_seed = ensure_default_makro_catalog()
+if _seed:
+    logger.info(
+        "Catálogo Makro cargado: %s productos (%s con SKU)",
+        _seed.get("imported"),
+        _seed.get("with_sku"),
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -258,8 +266,9 @@ def api_catalog_import():
     """
     Importa catálogo Makro desde Excel/CSV.
 
-    Columnas requeridas: EAN, Nombre, PVP.
-    Opcionales: Categoría, Costo.
+    Formatos:
+    - Clásico: EAN, Nombre, PVP (opcional: Categoría, Costo).
+    - EAN ↔ SKU: Regular (SKU), Descripción, Ean (opcional: Marca, PVP).
     """
     if "file" not in request.files:
         return jsonify({"error": "Adjunte un archivo en el campo 'file'."}), 400

@@ -325,9 +325,10 @@ function renderReport(report) {
     const isMakro = r.retailer === 'makro';
     const isMin = !isMakro && reg === k.min_price;
     const makroTag = isMakro ? ' <span class="badge bg-danger">MAKRO</span>' : '';
+    const skuTag = isMakro && r.makro_sku ? ` <span class="badge bg-secondary" title="SKU Makro (Regular)">SKU ${r.makro_sku}</span>` : '';
     const perKg = r.price_per_kg ? `<span class="text-muted small ms-1">(${fmtCOP(r.price_per_kg)}/kg)</span>` : '';
     html += `<div class="pbar-row">
-      <div class="pbar-name">${isMin ? '🏆 ' : (isMakro ? '🏠 ' : '')}${r.retailer_name}${makroTag}</div>
+      <div class="pbar-name">${isMin ? '🏆 ' : (isMakro ? '🏠 ' : '')}${r.retailer_name}${makroTag}${skuTag}</div>
       <div class="pbar-track"><div class="pbar-fill" style="width:${w}%;background:${color}">${fmtCOP(reg)}${perKg}</div></div>
       ${r.promo_price ? `<span class="pbar-tag" title="Precio con descuento de la competencia">PROMO ${fmtCOP(r.promo_price)}</span>` : '<span style="width:46px"></span>'}
     </div>`;
@@ -526,8 +527,10 @@ async function loadCatalogStats() {
   if (!box) return;
   const stats = await API.catalogStats();
   box.innerHTML = `<div class="row g-2">
-    <div class="col-md-4"><div class="kpi-card"><div class="kpi-label">Productos en catálogo</div><div class="kpi-value">${stats.with_pvp || 0}</div></div></div>
-    <div class="col-md-8"><div class="kpi-card"><div class="kpi-label">Última importación</div><div class="kpi-value" style="font-size:16px">${stats.last_updated ? stats.last_updated.replace('T', ' ').slice(0, 16) : '—'}</div></div></div>
+    <div class="col-md-3"><div class="kpi-card"><div class="kpi-label">Productos</div><div class="kpi-value">${stats.total_products || 0}</div></div></div>
+    <div class="col-md-3"><div class="kpi-card"><div class="kpi-label">Con SKU Makro</div><div class="kpi-value">${stats.with_sku || 0}</div></div></div>
+    <div class="col-md-3"><div class="kpi-card"><div class="kpi-label">Con PVP</div><div class="kpi-value">${stats.with_pvp || 0}</div></div></div>
+    <div class="col-md-3"><div class="kpi-card"><div class="kpi-label">Última importación</div><div class="kpi-value" style="font-size:14px">${stats.last_updated ? stats.last_updated.replace('T', ' ').slice(0, 16) : '—'}</div></div></div>
   </div>`;
 }
 
@@ -541,6 +544,7 @@ async function doCatalogImport() {
   const res = await fetch('/api/catalog/import', { method: 'POST', body: fd }).then(r => r.json());
   if (res.error) { out.innerHTML = `<div class="alert alert-danger">${res.error}</div>`; return; }
   let html = `<div class="alert alert-success">Importados: <strong>${res.imported}</strong> de ${res.total_rows} filas.</div>`;
+  if (res.with_sku != null) html += `<div class="text-muted small">Con SKU Makro: ${res.with_sku}</div>`;
   if (res.errors && res.errors.length) html += `<div class="alert alert-warning">${res.errors.slice(0, 10).join('<br>')}${res.errors.length > 10 ? '<br>…' : ''}</div>`;
   out.innerHTML = html;
   PRODUCTS = await API.products();

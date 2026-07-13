@@ -11,6 +11,7 @@ from typing import Optional
 from urllib.parse import quote
 
 from config import Config
+from services.makro_sku import lookup_makro_sku
 from services.matching import MatchCandidate
 from services.rounding import round_cop
 
@@ -95,6 +96,17 @@ class MakroTiendaScraper(BaseScraper):
     def _not_found_message(self) -> str:
         return "Producto no encontrado en Makro"
 
+    def _ean_not_in_catalog_message(self, ean: str) -> str:
+        return (
+            f"EAN {ean} no está en el catálogo Makro. "
+            "Importe el archivo PRODUCTOS_MAKRO (columnas Regular y Ean) "
+            "desde la sección Catálogo Makro."
+        )
+
+    def _sku_not_on_web_message(self, sku: str, product_name: Optional[str] = None) -> str:
+        label = product_name or f"SKU {sku}"
+        return f"{label} (SKU {sku}) no está disponible en tienda.makro.com.co"
+
     def _render_search(self, query: str) -> str:
         try:
             from playwright.sync_api import sync_playwright
@@ -121,25 +133,73 @@ class MakroTiendaScraper(BaseScraper):
         body = self._render_search(query)
         return _parse_makro_body(body)
 
-    def _item_to_result(self, item: dict, *, found: bool, query: str, city: Optional[str]) -> RetailerResult:
+    def _item_to_result(
+        self,
+        item: dict,
+        *,
+        found: bool,
+        query: str,
+        city: Optional[str],
+        catalog_product: Optional[dict] = None,
+        match_mode: str = "ean",
+    ) -> RetailerResult:
+        sku = (catalog_product or {}).get("makro_sku")
+        product_name = item.get("product_name") or (catalog_product or {}).get("name")
         return RetailerResult(
             retailer=self.key,
             retailer_name=self.name,
             found=found,
             price=item.get("price"),
             promo_price=item.get("promo_price"),
-            product_name=item.get("product_name"),
+            product_name=product_name,
             presentation=item.get("presentation"),
             url=f"{self.base_url}/search?name={quote(str(query))}",
-            match_mode="ean",
+            match_mode=match_mode,
             city=city,
+            makro_sku=str(sku) if sku else None,
         )
 
     def _fetch_by_ean(self, ean: str, city: Optional[str] = None) -> Optional[RetailerResult]:
-        items = self._items_from_query(ean)
+        query, catalog_product = self._resolve_ean_query(ean)
+        if not query:
+            return RetailerResult(
+                retailer=self.key,
+                retailer_name=self.name,
+                found=False,
+                city=city,
+                not_found_message=self._ean_not_in_catalog_message(ean),
+            )
+
+        items = self._items_from_query(query)
         if not items:
-            return RetailerResult(retailer=self.key, retailer_name=self.name, found=False, city=city)
-        return self._item_to_result(items[0], found=True, query=ean, city=city)
+            sku = (catalog_product or {}).get("makro_sku", query)
+            name = (catalog_product or {}).get("name")
+            return RetailerResult(
+                retailer=self.key,
+                retailer_name=self.name,
+                found=False,
+                city=city,
+                product_name=name,
+                makro_sku=str(sku),
+                not_found_message=self._sku_not_on_web_message(str(sku), name),
+            )
+
+        result = self._item_to_result(
+            items[0],
+            found=True,
+            query=query,
+            city=city,
+            catalog_product=catalog_product,
+            match_mode="ean",
+        )
+        return result
+
+    def _resolve_ean_query(self, ean: str) -> tuple[Optional[str], Optional[dict]]:
+        """Traduce EAN a SKU Makro usando el catálogo importado."""
+        catalog_product = lookup_makro_sku(ean)
+        if catalog_product and catalog_product.get("makro_sku"):
+            return str(catalog_product["makro_sku"]), catalog_product
+        return None, None
 
     def _fetch_candidates(
         self, description: str, city: Optional[str] = None
@@ -149,7 +209,7 @@ class MakroTiendaScraper(BaseScraper):
             name = item.get("product_name")
             if not name:
                 continue
-            result = self._item_to_result(item, found=False, query=description, city=city)
+            result = self._item_to_result(item, found=False, query=description, city=city, match_mode="description")
             out.append(
                 (MatchCandidate(name=name, payload={"catalog_rank": rank}), result)
             )

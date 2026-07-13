@@ -193,15 +193,17 @@
       <section class="view d-none" id="view-catalog">
         <h1 class="page-title">Catálogo Makro</h1>
         <p class="page-sub">
-          Sube un Excel o CSV con tus productos Makro (<code>EAN</code>, <code>Nombre</code>, <code>PVP</code>).
-          En cada comparación se usará el PVP para indicarte si estás más caro o más barato que la competencia.
+          Sube el Excel <strong>PRODUCTOS_MAKRO</strong> con columnas <code>Regular</code> (SKU Makro),
+          <code>Descripción</code> y <code>Ean</code> para que las búsquedas por código de barras
+          consulten tienda.makro.com.co correctamente. También puedes importar un archivo con
+          <code>EAN</code>, <code>Nombre</code> y <code>PVP</code> para comparar tu precio de lista.
         </p>
         <div class="card"><div class="card-body">
           <div class="row g-3 align-items-end">
             <div class="col-md-8">
               <label class="form-label">Archivo (.xlsx, .xls, .csv)</label>
               <input id="catalogFile" type="file" accept=".xlsx,.xls,.csv" class="form-control" />
-              <div class="form-text">Columnas: <strong>EAN</strong>, <strong>Nombre</strong>, <strong>PVP</strong>. Opcional: Categoría, Costo.</div>
+              <div class="form-text">Columnas: <strong>Regular</strong> (SKU), <strong>Descripción</strong>, <strong>Ean</strong>. Opcional: <strong>PVP</strong>, Categoría, Costo, Marca.</div>
             </div>
             <div class="col-md-4 d-grid">
               <button id="catalogBtn" class="btn btn-primary"><i class="bi bi-cloud-upload"></i> Importar catálogo</button>

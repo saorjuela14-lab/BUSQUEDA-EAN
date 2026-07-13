@@ -49,6 +49,7 @@ class RetailerResult:
     promo_price_per_kg: Optional[int] = None
     error: Optional[str] = None
     not_found_message: Optional[str] = None
+    makro_sku: Optional[str] = None
     # Listado completo de coincidencias rankeadas (búsqueda por descripción).
     matches: list[dict] = field(default_factory=list)
     # Ciudad usada para regionalizar la consulta (None = nacional/por defecto).
@@ -91,6 +92,9 @@ class BaseScraper:
             if _is_scannable_ean(ean):
                 result = self._fetch_by_ean(ean, city=city)
             if result and result.found:
+                result.city = result.city or city
+                return result
+            if result and result.not_found_message and not description:
                 result.city = result.city or city
                 return result
 

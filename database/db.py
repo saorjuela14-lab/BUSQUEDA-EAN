@@ -56,6 +56,8 @@ def _migrate_schema() -> None:
             alters.append("ALTER TABLE products ADD COLUMN pvp INTEGER")
         if "catalog_updated_at" not in existing:
             alters.append("ALTER TABLE products ADD COLUMN catalog_updated_at DATETIME")
+        if "makro_sku" not in existing:
+            alters.append("ALTER TABLE products ADD COLUMN makro_sku VARCHAR(20)")
 
     if "price_queries" in table_names:
         existing = {c["name"] for c in insp.get_columns("price_queries")}
