@@ -20,7 +20,7 @@ from typing import Optional
 import requests
 
 from config import Config, city_postal_code
-from services.matching import MatchCandidate
+from services.matching import MatchCandidate, search_query_variants
 from services.rounding import round_cop
 
 from .base import BaseScraper, RetailerResult
@@ -164,19 +164,42 @@ class VtexScraper(BaseScraper):
             result.city = city
         return result
 
+    def _search_vtex_products(
+        self, description: str, city: Optional[str] = None
+    ) -> list[dict]:
+        """Ejecuta búsqueda VTEX probando variantes (tildes, plurales, una palabra)."""
+        postal_code = city_postal_code(city)
+        session = self._session(postal_code)
+        url = f"{self.base_url}/api/catalog_system/pub/products/search"
+        seen: set[str] = set()
+        merged: list[dict] = []
+
+        for query in search_query_variants(description):
+            params = {"ft": query, "_from": 0, "_to": 23}
+            try:
+                resp = session.get(url, params=params, timeout=Config.SCRAPER_TIMEOUT)
+            except requests.RequestException as exc:
+                logger.debug("VTEX search falló (%s) ft=%r: %s", self.key, query, exc)
+                continue
+            if resp.status_code == 400:
+                continue
+            if not resp.ok:
+                logger.debug("VTEX search HTTP %s (%s) ft=%r", resp.status_code, self.key, query)
+                continue
+            for product in resp.json() or []:
+                pid = str(product.get("productId") or product.get("productName") or "")
+                if not pid or pid in seen:
+                    continue
+                seen.add(pid)
+                merged.append(product)
+        return merged
+
     def _fetch_candidates(
         self, description: str, city: Optional[str] = None
     ) -> list[tuple[MatchCandidate, RetailerResult]]:
-        postal_code = city_postal_code(city)
-        url = f"{self.base_url}/api/catalog_system/pub/products/search"
-        query = _vtex_safe_query(description)
-        params = {"ft": query, "_from": 0, "_to": 23}
-        resp = self._session(postal_code).get(url, params=params, timeout=Config.SCRAPER_TIMEOUT)
-        if resp.status_code == 400 and query != description.strip():
-            params["ft"] = description.strip()
-            resp = self._session(postal_code).get(url, params=params, timeout=Config.SCRAPER_TIMEOUT)
-        resp.raise_for_status()
-        data = resp.json() or []
+        data = self._search_vtex_products(description, city=city)
+        if not data:
+            return []
         out: list[tuple[MatchCandidate, RetailerResult]] = []
         for rank, product in enumerate(data):
             result = self._parse_product(product)

@@ -83,6 +83,51 @@ def _strip_accents(text: str) -> str:
     return "".join(c for c in normalized if not unicodedata.combining(c))
 
 
+def _singularize_es(token: str) -> str:
+    """
+    Aproximación al singular en español para comparar plurales en homologación.
+
+    Ej: arandanos → arandano, fresas → fresa, tomates → tomate.
+    """
+    t = token.lower().strip()
+    if len(t) < 3:
+        return t
+    if t.endswith("s"):
+        if t.endswith("es") and len(t) > 4 and t[-3] not in "aeiou":
+            return t[:-2]
+        if t[-2] in "aeiou":
+            return t[:-1]
+    return t
+
+
+def _tokens_match(a: str, b: str) -> bool:
+    """True si dos tokens son iguales ignorando plural y variaciones cortas."""
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    sa, sb = _singularize_es(a), _singularize_es(b)
+    if sa == sb:
+        return True
+    if len(sa) >= 4 and len(sb) >= 4 and (sa.startswith(sb) or sb.startswith(sa)):
+        return True
+    return False
+
+
+def _token_in_text(token: str, text: str) -> bool:
+    """Comprueba si un token de la consulta aparece en el texto normalizado."""
+    words = text.split()
+    if any(_tokens_match(token, w) for w in words):
+        return True
+    if len(token) >= 4:
+        stem = _singularize_es(token)
+        return any(
+            _tokens_match(stem, w) or (len(w) >= 4 and w.startswith(stem[:4]))
+            for w in words
+        )
+    return False
+
+
 def _normalize(text: str, *, strip_noise: bool = False) -> str:
     text = _strip_accents(text.lower())
     text = re.sub(r"[^\w\s.,]", " ", text)
@@ -115,6 +160,47 @@ def _name_part_query(query: str) -> str:
     cleaned = _QUERY_WEIGHT_RE.sub(" ", query)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return cleaned or query.strip()
+
+
+def search_query_variants(query: str) -> list[str]:
+    """
+    Genera variantes de búsqueda tolerantes a tildes, mayúsculas y plurales.
+
+    Algunos retailers VTEX (p. ej. Jumbo) devuelven HTTP 400 con consultas de
+  varias palabras; en esos casos conviene probar el término principal en singular.
+    """
+    variants: list[str] = []
+
+    def add(value: str) -> None:
+        text = re.sub(r"\s+", " ", str(value or "").strip())
+        if text and text not in variants:
+            variants.append(text)
+
+    raw = query.strip()
+    name_part = _name_part_query(raw)
+    add(raw)
+    add(name_part)
+
+    normalized = _normalize(name_part)
+    add(normalized)
+
+    tokens = [t for t in normalized.split() if t and t not in _NOISE_WORDS]
+    if not tokens:
+        return variants
+
+    singular_tokens = [_singularize_es(t) for t in tokens]
+    add(" ".join(singular_tokens))
+    add(" ".join(tokens))
+
+    # Primer token en singular: clave para Jumbo (ft=arandano vs ft=arandanos estuche).
+    add(singular_tokens[0])
+    add(tokens[0])
+
+    if len(singular_tokens) > 1:
+        add(singular_tokens[1])
+    add(max(singular_tokens, key=len))
+
+    return variants
 
 
 def extract_size(text: str) -> Optional[tuple[str, float]]:
@@ -159,25 +245,29 @@ def is_relevant_candidate(
     c_norm = _normalize(candidate, strip_noise=False)
     primary = _primary_tokens(candidate, strip_noise=False)
 
-    if not all(re.search(rf"\b{re.escape(t)}\b", c_norm) for t in q_tokens):
+    if not all(_token_in_text(t, c_norm) for t in q_tokens):
         return False
 
     if len(q_tokens) == 1:
         qt = q_tokens[0]
 
-        if re.search(rf"\b(con|y|de|en)\s+.*\b{re.escape(qt)}\b", c_norm):
-            if not (primary and primary[0] == qt):
+        if re.search(rf"\b(con|y|de|en)\s+.*\b{re.escape(_singularize_es(qt))}", c_norm):
+            if not (primary and _tokens_match(primary[0], qt)):
                 return False
 
         if primary and primary[0] in _SECONDARY_HEAD:
             return False
 
         idx = next(
-            (i for i, t in enumerate(primary) if t == qt or (len(qt) >= 4 and t.startswith(qt))),
+            (
+                i
+                for i, t in enumerate(primary)
+                if _tokens_match(t, qt)
+            ),
             -1,
         )
         if idx < 0:
-            return c_norm.startswith(qt)
+            return c_norm.startswith(_singularize_es(qt)) or _token_in_text(qt, c_norm)
 
         tail = primary[idx + 1 :]
         if any(t in _SECONDARY_HEAD for t in tail):
@@ -188,8 +278,8 @@ def is_relevant_candidate(
     if primary and primary[0] in _SECONDARY_HEAD and primary[0] not in q_tokens:
         return False
 
-    return bool(primary and all(t in primary for t in q_tokens)) or all(
-        t in c_norm.split()[: max(3, len(q_tokens) + 1)] for t in q_tokens
+    return bool(primary and all(any(_tokens_match(t, p) for p in primary) for t in q_tokens)) or all(
+        _token_in_text(t, " ".join(c_norm.split()[: max(3, len(q_tokens) + 1)])) for t in q_tokens
     )
 
 
@@ -202,11 +292,11 @@ def _relevance_adjustments(query: str, candidate: str, *, strip_noise: bool) -> 
 
     if q_norm == c_norm:
         return 30.0
-    if primary and q_tokens and primary[0] == q_tokens[0]:
+    if primary and q_tokens and _tokens_match(primary[0], q_tokens[0]):
         delta += 15.0
     elif c_norm.startswith(q_norm):
         delta += 12.0
-    if primary and q_tokens and all(t in primary for t in q_tokens):
+    if primary and q_tokens and all(any(_tokens_match(t, p) for p in primary) for t in q_tokens):
         delta += 8.0
 
     if primary and q_tokens and primary[0] in _SECONDARY_HEAD and primary[0] not in q_tokens:
@@ -240,11 +330,12 @@ def similarity(query: str, candidate: str, *, category: Optional[str] = None) ->
         compare_str = primary_str or c_norm
         if q_tokens and primary:
             qt = q_tokens[0]
-            if primary[0] == qt:
+            if _tokens_match(primary[0], qt):
                 compare_str = primary_str or c_norm
-            elif qt in primary:
-                idx = next(i for i, t in enumerate(primary) if t == qt)
-                compare_str = " ".join(primary[idx : min(len(primary), idx + 3)])
+            else:
+                idx = next((i for i, t in enumerate(primary) if _tokens_match(t, qt)), -1)
+                if idx >= 0:
+                    compare_str = " ".join(primary[idx : min(len(primary), idx + 3)])
         base = max(
             float(fuzz.ratio(q_norm, compare_str)),
             float(fuzz.partial_ratio(q_norm, c_norm)),
