@@ -13,6 +13,7 @@ from urllib.parse import quote
 from config import Config
 from services.makro_sku import lookup_makro_sku
 from services.matching import MatchCandidate
+from services.search_queries import merge_query_search
 from services.rounding import round_cop
 
 from .base import BaseScraper, RetailerResult
@@ -133,6 +134,14 @@ class MakroTiendaScraper(BaseScraper):
         body = self._render_search(query)
         return _parse_makro_body(body)
 
+    def _items_from_description(self, description: str) -> list[dict]:
+        return merge_query_search(
+            description,
+            self._items_from_query,
+            dedupe_key=lambda item: (item.get("product_name") or "").strip().lower(),
+            max_variants=5,
+        )
+
     def _item_to_result(
         self,
         item: dict,
@@ -205,7 +214,7 @@ class MakroTiendaScraper(BaseScraper):
         self, description: str, city: Optional[str] = None
     ) -> list[tuple[MatchCandidate, RetailerResult]]:
         out: list[tuple[MatchCandidate, RetailerResult]] = []
-        for rank, item in enumerate(self._items_from_query(description)):
+        for rank, item in enumerate(self._items_from_description(description)):
             name = item.get("product_name")
             if not name:
                 continue

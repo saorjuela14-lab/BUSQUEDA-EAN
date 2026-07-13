@@ -20,7 +20,8 @@ from typing import Optional
 import requests
 
 from config import Config, city_postal_code
-from services.matching import MatchCandidate, search_query_variants
+from services.matching import MatchCandidate
+from services.search_queries import merge_query_search
 from services.rounding import round_cop
 
 from .base import BaseScraper, RetailerResult
@@ -171,28 +172,19 @@ class VtexScraper(BaseScraper):
         postal_code = city_postal_code(city)
         session = self._session(postal_code)
         url = f"{self.base_url}/api/catalog_system/pub/products/search"
-        seen: set[str] = set()
-        merged: list[dict] = []
 
-        for query in search_query_variants(description):
+        def search_one(query: str) -> list[dict]:
             params = {"ft": query, "_from": 0, "_to": 23}
-            try:
-                resp = session.get(url, params=params, timeout=Config.SCRAPER_TIMEOUT)
-            except requests.RequestException as exc:
-                logger.debug("VTEX search falló (%s) ft=%r: %s", self.key, query, exc)
-                continue
-            if resp.status_code == 400:
-                continue
-            if not resp.ok:
-                logger.debug("VTEX search HTTP %s (%s) ft=%r", resp.status_code, self.key, query)
-                continue
-            for product in resp.json() or []:
-                pid = str(product.get("productId") or product.get("productName") or "")
-                if not pid or pid in seen:
-                    continue
-                seen.add(pid)
-                merged.append(product)
-        return merged
+            resp = session.get(url, params=params, timeout=Config.SCRAPER_TIMEOUT)
+            if resp.status_code == 400 or not resp.ok:
+                return []
+            return resp.json() or []
+
+        return merge_query_search(
+            description,
+            search_one,
+            dedupe_key=lambda p: str(p.get("productId") or p.get("productName") or ""),
+        )
 
     def _fetch_candidates(
         self, description: str, city: Optional[str] = None

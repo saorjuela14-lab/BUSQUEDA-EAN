@@ -77,6 +77,15 @@ _NOISE_WORDS = {
     "fresco", "fresca", "nacional",
 }
 
+# Términos de empaque/presentación que no siempre aparecen en el título del retailer.
+_OPTIONAL_DESCRIPTOR_TOKENS = frozenset(
+    {
+        "estuche", "bandeja", "empaque", "pack", "paquete", "bolsa", "canasta",
+        "congelado", "fresco", "fresca", "natural", "organico", "organica",
+        "importado", "importada", "granel", "especial", "premium", "unidad",
+    }
+)
+
 
 def _strip_accents(text: str) -> str:
     normalized = unicodedata.normalize("NFKD", text)
@@ -149,6 +158,20 @@ def _primary_tokens(name: str, *, strip_noise: bool = False) -> list[str]:
 
 def _query_tokens(query: str, *, strip_noise: bool = False) -> list[str]:
     return [t for t in _normalize(query, strip_noise=strip_noise).split() if t]
+
+
+def _required_query_tokens(query: str, *, strip_noise: bool = False) -> list[str]:
+    """
+    Tokens obligatorios para relevancia.
+
+    Palabras como 'estuche' o 'bandeja' son opcionales porque no todos los
+    retailers las incluyen en el título (p. ej. PriceSmart: 'Arándanos 508 g').
+    """
+    tokens = _query_tokens(_name_part_query(query), strip_noise=strip_noise)
+    if len(tokens) <= 1:
+        return tokens
+    required = [t for t in tokens if t not in _OPTIONAL_DESCRIPTOR_TOKENS]
+    return required if required else tokens[:1]
 
 
 def _name_part_query(query: str) -> str:
@@ -237,7 +260,7 @@ def is_relevant_candidate(
     como sabor, ingrediente o categoría distinta a la intención del usuario.
     """
     name_query = _name_part_query(query)
-    q_tokens = _query_tokens(name_query, strip_noise=False)
+    q_tokens = _required_query_tokens(name_query, strip_noise=False)
     if not q_tokens:
         return False
 

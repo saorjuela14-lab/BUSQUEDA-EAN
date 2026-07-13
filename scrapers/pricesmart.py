@@ -13,6 +13,7 @@ import requests
 
 from config import Config
 from services.matching import MatchCandidate
+from services.search_queries import merge_query_search
 from services.rounding import round_cop
 
 from .base import BaseScraper, RetailerResult
@@ -107,8 +108,13 @@ class PriceSmartScraper(BaseScraper):
     def _fetch_candidates(
         self, description: str, city: Optional[str] = None
     ) -> list[tuple[MatchCandidate, RetailerResult]]:
+        docs = merge_query_search(
+            description,
+            lambda q: self._query(q, rows=24),
+            dedupe_key=lambda d: str(d.get("pid") or d.get("title") or ""),
+        )
         out: list[tuple[MatchCandidate, RetailerResult]] = []
-        for rank, doc in enumerate(self._query(description, rows=24)):
+        for rank, doc in enumerate(docs):
             result = self._doc_to_result(doc, found=False)
             if result and result.product_name:
                 result.city = city

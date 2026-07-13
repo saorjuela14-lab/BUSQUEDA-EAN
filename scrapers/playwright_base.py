@@ -19,6 +19,7 @@ from typing import Optional
 
 from config import Config
 from services.matching import MatchCandidate
+from services.search_queries import merge_query_search
 from services.rounding import round_cop
 
 from .base import BaseScraper, RetailerResult
@@ -123,9 +124,18 @@ class PlaywrightScraper(BaseScraper):
     def _fetch_candidates(
         self, description: str, city: Optional[str] = None
     ) -> list[tuple[MatchCandidate, RetailerResult]]:
-        html = self._render(self._build_search_url(description))
+        def search_one(query: str) -> list[tuple[str, Optional[int]]]:
+            html = self._render(self._build_search_url(query))
+            return self._extract(html)
+
+        items = merge_query_search(
+            description,
+            search_one,
+            dedupe_key=lambda pair: (pair[0] or "").strip().lower(),
+            max_variants=5,
+        )
         out: list[tuple[MatchCandidate, RetailerResult]] = []
-        for name, price in self._extract(html):
+        for rank, (name, price) in enumerate(items):
             result = RetailerResult(
                 retailer=self.key,
                 retailer_name=self.name,
@@ -135,5 +145,5 @@ class PlaywrightScraper(BaseScraper):
                 url=self._build_search_url(description),
                 city=city,
             )
-            out.append((MatchCandidate(name=name, payload={}), result))
+            out.append((MatchCandidate(name=name, payload={"catalog_rank": rank}), result))
         return out

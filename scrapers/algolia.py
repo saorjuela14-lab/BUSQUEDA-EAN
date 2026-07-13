@@ -17,6 +17,7 @@ import requests
 
 from config import Config
 from services.matching import MatchCandidate
+from services.search_queries import merge_query_search
 from services.rounding import round_cop
 
 from .base import BaseScraper, RetailerResult
@@ -112,8 +113,13 @@ class AlgoliaScraper(BaseScraper):
     def _fetch_candidates(
         self, description: str, city: Optional[str] = None
     ) -> list[tuple[MatchCandidate, RetailerResult]]:
+        hits = merge_query_search(
+            description,
+            lambda q: self._query(q, hits_per_page=24),
+            dedupe_key=lambda h: str(h.get("objectID") or h.get(self.field_name) or ""),
+        )
         out: list[tuple[MatchCandidate, RetailerResult]] = []
-        for rank, hit in enumerate(self._query(description, hits_per_page=24)):
+        for rank, hit in enumerate(hits):
             result = self._hit_to_result(hit, found=False)
             if result and result.product_name:
                 out.append(
