@@ -2,7 +2,11 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#e2001a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <title>Makro · Retail Price Intelligence Colombia</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
@@ -10,11 +14,16 @@
 </head>
 <body>
   <div class="app-shell">
+    <div id="sidebarBackdrop" class="sidebar-backdrop" aria-hidden="true"></div>
+
     <!-- SIDEBAR -->
-    <aside class="sidebar">
+    <aside id="sidebar" class="sidebar" aria-label="Menú principal">
       <div class="brand">
         <div class="brand-logo">MAKRO</div>
         <div class="brand-sub">Retail Price Intelligence</div>
+        <button type="button" id="sidebarCloseBtn" class="sidebar-close" aria-label="Cerrar menú">
+          <i class="bi bi-x-lg"></i>
+        </button>
       </div>
       <nav class="nav-menu">
         <a class="nav-link active" data-view="search"><i class="bi bi-search"></i> Consulta</a>
@@ -32,6 +41,17 @@
 
     <!-- MAIN -->
     <main class="main">
+      <header class="mobile-topbar">
+        <button type="button" id="menuBtn" class="menu-btn" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">
+          <i class="bi bi-list"></i>
+        </button>
+        <div class="mobile-brand">
+          <span class="mobile-brand-logo">MAKRO</span>
+          <span class="mobile-brand-sub">Precios</span>
+        </div>
+        <span id="mobileModeBadge" class="badge bg-success mobile-mode-badge">REAL</span>
+      </header>
+
       <!-- ── VIEW: SEARCH ── -->
       <section class="view" id="view-search">
         <h1 class="page-title">Consulta de precios</h1>
@@ -48,32 +68,32 @@
           <div class="card filter-card">
             <div class="card-body">
               <div class="row g-3 align-items-end">
-                <div class="col-md-2">
+                <div class="col-12 col-md-2">
                   <label class="form-label">Categoría</label>
                   <select id="categorySelect" class="form-select"></select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-12 col-md-3">
                   <label class="form-label">EAN</label>
-                  <input id="eanInput" class="form-control" placeholder="7702..." />
+                  <input id="eanInput" class="form-control" placeholder="7702..." inputmode="numeric" autocomplete="off" />
                 </div>
-                <div class="col-md-2">
+                <div class="col-6 col-md-2">
                   <label class="form-label">Costo Makro (COP)</label>
-                  <input id="costInput" type="number" class="form-control" placeholder="0" />
+                  <input id="costInput" type="number" class="form-control" placeholder="0" inputmode="decimal" />
                 </div>
-                <div class="col-md-2">
+                <div class="col-6 col-md-2">
                   <label class="form-label">Margen objetivo %</label>
-                  <input id="marginInput" type="number" class="form-control" placeholder="15" />
+                  <input id="marginInput" type="number" class="form-control" placeholder="15" inputmode="decimal" />
                 </div>
-                <div class="col-md-3 d-grid">
+                <div class="col-12 col-md-3 d-grid">
                   <button id="searchBtn" class="btn btn-primary"><i class="bi bi-search"></i> Buscar</button>
                 </div>
               </div>
               <div class="row g-3 align-items-end mt-1">
-                <div class="col-md-6">
+                <div class="col-12 col-md-6">
                   <label class="form-label">Descripción (homologación si el EAN no existe)</label>
                   <input id="descInput" class="form-control" placeholder="Ej: Leche Alpina Entera 1100 ml" />
                 </div>
-                <div class="col-md-6">
+                <div class="col-12 col-md-6">
                   <label class="form-label">Tienda / ciudad</label>
                   <select id="locationSelect" class="form-select">
                     <option value="">Nacional (sin regionalizar)</option>
@@ -96,45 +116,45 @@
                 y selecciona tienda/ciudad para precios regionalizados (VTEX).
               </p>
               <div class="row g-3 align-items-end">
-                <div class="col-md-2">
+                <div class="col-12 col-md-2">
                   <label class="form-label">Categoría</label>
                   <select id="nameCategorySelect" class="form-select"></select>
                 </div>
-                <div class="col-md-4">
+                <div class="col-12 col-md-4">
                   <label class="form-label">Nombre del producto</label>
-                  <input id="nameInput" class="form-control" placeholder="Ej: Pechuga de pollo, Arándanos" />
+                  <input id="nameInput" class="form-control" placeholder="Ej: Pechuga de pollo, Arándanos" autocomplete="off" />
                 </div>
-                <div class="col-md-2">
+                <div class="col-7 col-md-2">
                   <label class="form-label">Peso / cantidad</label>
                   <div class="input-group">
-                    <input id="nameWeightInput" type="number" class="form-control" placeholder="1" min="0" step="any" />
+                    <input id="nameWeightInput" type="number" class="form-control" placeholder="1" min="0" step="any" inputmode="decimal" />
                     <select id="nameWeightUnit" class="form-select" style="max-width:72px">
                       <option value="kg" selected>kg</option>
                       <option value="g">g</option>
                     </select>
                   </div>
                 </div>
-                <div class="col-md-2">
+                <div class="col-5 col-md-2">
                   <label class="form-label">Costo Makro (COP)</label>
-                  <input id="nameCostInput" type="number" class="form-control" placeholder="0" />
+                  <input id="nameCostInput" type="number" class="form-control" placeholder="0" inputmode="decimal" />
                   <div class="form-text">Para el peso indicado</div>
                 </div>
-                <div class="col-md-2 d-grid">
+                <div class="col-12 col-md-2 d-grid">
                   <button id="searchNameBtn" class="btn btn-primary"><i class="bi bi-search"></i> Buscar</button>
                 </div>
               </div>
               <div class="row g-3 align-items-end mt-1">
-                <div class="col-md-3">
+                <div class="col-6 col-md-3">
                   <label class="form-label">Margen objetivo %</label>
-                  <input id="nameMarginInput" type="number" class="form-control" placeholder="15" />
+                  <input id="nameMarginInput" type="number" class="form-control" placeholder="15" inputmode="decimal" />
                 </div>
-                <div class="col-md-3">
+                <div class="col-6 col-md-3">
                   <label class="form-label">Tienda / ciudad</label>
                   <select id="nameLocationSelect" class="form-select">
                     <option value="">Nacional</option>
                   </select>
                 </div>
-                <div class="col-md-6">
+                <div class="col-12 col-md-6">
                   <label class="form-label">Comparar varias ciudades <span class="text-muted">(opcional, separadas por coma)</span></label>
                   <input id="nameMultiCityInput" class="form-control" placeholder="Ej: Bogotá, Medellín, Cali o 1, 5, 18" />
                   <div class="form-text">Si se llena, ignora la tienda individual y compara en todas.</div>

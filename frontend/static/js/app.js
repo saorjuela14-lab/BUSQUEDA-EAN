@@ -46,10 +46,40 @@ function parseCitiesList(raw) {
 }
 
 // ── Navegación ──────────────────────────────────────────────
+function closeMobileMenu() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  const menuBtn = document.getElementById('menuBtn');
+  if (!sidebar) return;
+  sidebar.classList.remove('open');
+  if (backdrop) backdrop.classList.remove('open');
+  document.body.classList.remove('menu-open');
+  if (menuBtn) menuBtn.setAttribute('aria-expanded', 'false');
+}
+
+function openMobileMenu() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  const menuBtn = document.getElementById('menuBtn');
+  if (!sidebar) return;
+  sidebar.classList.add('open');
+  if (backdrop) backdrop.classList.add('open');
+  document.body.classList.add('menu-open');
+  if (menuBtn) menuBtn.setAttribute('aria-expanded', 'true');
+}
+
+function toggleMobileMenu() {
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar && sidebar.classList.contains('open')) closeMobileMenu();
+  else openMobileMenu();
+}
+
 function switchView(view) {
   document.querySelectorAll('.nav-link').forEach(el => el.classList.toggle('active', el.dataset.view === view));
   document.querySelectorAll('.view').forEach(el => el.classList.add('d-none'));
   document.getElementById('view-' + view).classList.remove('d-none');
+  closeMobileMenu();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
   if (view === 'dashboard') loadDashboard();
   if (view === 'history') loadHistory();
   if (view === 'alerts') loadAlerts();
@@ -61,6 +91,11 @@ async function init() {
   CONFIG = await API.config();
   document.getElementById('modeBadge').textContent = 'SCRAPING REAL';
   document.getElementById('modeBadge').className = 'badge bg-success';
+  const mobileBadge = document.getElementById('mobileModeBadge');
+  if (mobileBadge) {
+    mobileBadge.textContent = 'REAL';
+    mobileBadge.className = 'badge bg-success mobile-mode-badge';
+  }
 
   const catOptions = Object.entries(CONFIG.categories)
     .map(([k, v]) => `<option value="${k}">${v.emoji} ${v.label}</option>`).join('');
@@ -87,6 +122,18 @@ async function init() {
   document.getElementById('nameInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearchName(); });
   document.getElementById('bulkBtn').addEventListener('click', doBulk);
   document.getElementById('catalogBtn').addEventListener('click', doCatalogImport);
+
+  const menuBtn = document.getElementById('menuBtn');
+  const closeBtn = document.getElementById('sidebarCloseBtn');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (menuBtn) menuBtn.addEventListener('click', toggleMobileMenu);
+  if (closeBtn) closeBtn.addEventListener('click', closeMobileMenu);
+  if (backdrop) backdrop.addEventListener('click', closeMobileMenu);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMobileMenu(); });
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 860) closeMobileMenu();
+  });
+
   loadCatalogStats();
 }
 
@@ -298,16 +345,16 @@ function renderReport(report) {
   }
 
   html += `
-    <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
-      <div>
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+      <div class="report-header-meta">
         <span class="badge-cat" style="background:${(cat.color||'#888')}22;color:${cat.color||'#888'}">${cat.emoji||''} ${cat.label||''}</span>
-        <span class="fw-bold ms-2">${report.product_name}</span>
+        <span class="fw-bold">${report.product_name}</span>
         ${eanLabel}
         ${modeBadge}
         ${weightBadge}
         ${cityBadge}
       </div>
-      <button class="btn btn-outline-success btn-sm" onclick='exportExcel(${JSON.stringify(report.ean)}, ${report.cost}, ${JSON.stringify(report.category)}, ${JSON.stringify(exportDesc)}, ${JSON.stringify(report.city || null)})'>
+      <button class="btn btn-outline-success btn-sm report-export-btn" onclick='exportExcel(${JSON.stringify(report.ean)}, ${report.cost}, ${JSON.stringify(report.category)}, ${JSON.stringify(exportDesc)}, ${JSON.stringify(report.city || null)})'>
         <i class="bi bi-file-earmark-excel"></i> Exportar Excel
       </button>
     </div>
