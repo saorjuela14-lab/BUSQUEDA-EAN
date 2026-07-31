@@ -307,6 +307,8 @@ body {
   .section-title { font-size: 15px; margin-top: 20px; }
 
   .alert { font-size: 13px; }
+
+  .report-export-btn { width: 100%; max-width: 100%; min-height: 42px; }
 }
 
 @media (max-width: 420px) {
