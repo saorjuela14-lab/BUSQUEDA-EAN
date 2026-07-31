@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "busqueda-ean"
 version = "1.0.0"
@@ -23,3 +27,12 @@ dependencies = [
 
 [tool.fastapi]
 entrypoint = "main:app"
+
+# Evita el error de setuptools con flat-layout:
+# "Multiple top-level packages discovered: data, export, frontend, ..."
+[tool.setuptools]
+py-modules = ["main", "app", "config"]
+
+[tool.setuptools.packages.find]
+include = ["services*", "database*", "scrapers*", "export*"]
+exclude = ["data*", "frontend*", "uploads*", "logs*", "reports*", "tests*"]
