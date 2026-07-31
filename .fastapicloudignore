@@ -1,0 +1,12 @@
+# Extra ignores for FastAPI Cloud uploads (in addition to .gitignore).
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+logs/
+uploads/
+reports/
+*.db
+.git/

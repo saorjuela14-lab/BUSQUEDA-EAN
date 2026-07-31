@@ -1,0 +1,25 @@
+[project]
+name = "busqueda-ean"
+version = "1.0.0"
+description = "Retail Price Intelligence Colombia — comparación de precios Makro"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "fastapi[standard]",
+    "a2wsgi>=1.10.0",
+    "flask==3.0.3",
+    "flask-cors==4.0.1",
+    "gunicorn==22.0.0",
+    "playwright==1.44.0",
+    "pandas==2.2.2",
+    "numpy==2.0.1",
+    "openpyxl==3.1.5",
+    "sqlalchemy==2.0.31",
+    "rapidfuzz==3.9.6",
+    "requests==2.32.3",
+    "beautifulsoup4==4.12.3",
+    "xlsxwriter==3.2.0",
+    "python-dotenv==1.0.1",
+]
+
+[tool.fastapi]
+entrypoint = "main:app"
